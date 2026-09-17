@@ -757,9 +757,8 @@ async function startScanner(field, mode = 'qr') {
 
   /*
    * QR : html5-qrcode reste utilisé.
-   * Code-barres : on utilise directement ZXing Browser 0.2.1.
-   * Cette version récente améliore le décodage des codes 1D et permet
-   * un lecteur dédié aux codes-barres au lieu de mélanger QR + 1D.
+   * Code 128 : pipeline caméra + Canvas + ZXing. On analyse plusieurs
+   * bandes horizontales agrandies, ce qui aide les codes longs/fins.
    */
   if (!isQrMode) {
     if (!window.ZXingBrowser || !window.ZXingBrowser.BrowserMultiFormatOneDReader) {
@@ -770,101 +769,162 @@ async function startScanner(field, mode = 'qr') {
     }
 
     try {
+      const previewContainer = document.getElementById(readerId);
+      previewContainer.className = 'reader barcode-reader';
+      previewContainer.innerHTML = '';
+
+      const preview = document.createElement('video');
+      preview.autoplay = true;
+      preview.muted = true;
+      preview.playsInline = true;
+      preview.setAttribute('playsinline', 'true');
+      previewContainer.appendChild(preview);
+
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 }
+          },
+          audio: false
+        });
+      } catch (e) {
+        console.warn('Fallback caméra:', e);
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      }
+
+      preview.srcObject = stream;
+      await preview.play();
+      await new Promise(resolve => setTimeout(resolve, 350));
+
+      if (!preview.videoWidth || !preview.videoHeight) {
+        throw new Error('Le flux caméra ne fournit aucune image vidéo.');
+      }
+
       const barcodeReader = new ZXingBrowser.BrowserMultiFormatOneDReader();
-      activeScanner = barcodeReader;
-      activeScannerType = 'zxing';
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      const contrastCanvas = document.createElement('canvas');
+      const contrastCtx = contrastCanvas.getContext('2d', { willReadFrequently: true });
 
       let lastText = '';
       let confirmations = 0;
       let lastAt = 0;
       let finished = false;
+      let scanning = false;
+      let timer = null;
 
-      // Sur iPhone/Safari, ne pas imposer 1920x1080 + 30 fps à l'ouverture :
-      // certains appareils refusent la piste vidéo avec ces contraintes.
-      // On demande d'abord uniquement la caméra arrière et laisse Safari
-      // choisir la résolution réellement disponible.
-      const previewContainer = document.getElementById(readerId);
-      previewContainer.className = 'reader barcode-reader';
-      previewContainer.innerHTML = '';
-
-      // IMPORTANT iPhone/Safari : ZXing attend ici un vrai <video>,
-      // pas le <div> qui contient le lecteur.
-      // Passer le <div> provoque exactement :
-      // "Couldn't get videoElement from videoSource!"
-      const preview = document.createElement('video');
-      preview.setAttribute('autoplay', 'true');
-      preview.setAttribute('muted', 'true');
-      preview.setAttribute('playsinline', 'true');
-      preview.muted = true;
-      previewContainer.appendChild(preview);
-
-      const callback = function(result, error) {
-          if (finished || !result) return;
-
-          const text = result.getText ? result.getText().trim() : String(result.text || '').trim();
-          if (!text) return;
-
-          const now = Date.now();
-
-          // 2 lectures identiques rapprochées suffisent : on évite ici
-          // d'imposer 3-4 secondes de délai à l'utilisateur.
-          if (text === lastText && now - lastAt < 1500) {
-            confirmations++;
-          } else {
-            lastText = text;
-            confirmations = 1;
-          }
-          lastAt = now;
-
-          if (confirmations < 2) return;
-
-          finished = true;
-          document.getElementById(field).value = text;
-          showMessage('Code-barres détecté : ' + text, 'success');
-          stopScanner(field);
-        };
-
-      let controls;
-      try {
-        controls = await barcodeReader.decodeFromConstraints(
-          {
-            video: {
-              facingMode: { ideal: 'environment' }
-            }
-          },
-          preview,
-          callback
-        );
-      } catch (firstError) {
-        console.warn('ZXing caméra arrière avec contrainte simple:', firstError);
-
-        // Fallback iPhone : aucune contrainte de caméra.
-        controls = await barcodeReader.decodeFromConstraints(
-          { video: true },
-          preview,
-          callback
-        );
+      function resizeCanvas(c, w, h) {
+        if (c.width !== w) c.width = w;
+        if (c.height !== h) c.height = h;
       }
 
-      activeScanner = { reader: barcodeReader, controls: controls };
+      function decodeCanvas(c) {
+        try {
+          const result = barcodeReader.decodeFromCanvas(c);
+          if (!result) return null;
+          return result.getText ? result.getText().trim() : String(result.text || '').trim();
+        } catch (e) {
+          return null;
+        }
+      }
+
+      function accept(text) {
+        if (!text || finished) return false;
+        const now = Date.now();
+        if (text === lastText && now - lastAt < 1800) {
+          confirmations++;
+        } else {
+          lastText = text;
+          confirmations = 1;
+        }
+        lastAt = now;
+        if (confirmations < 2) return false;
+
+        finished = true;
+        document.getElementById(field).value = text;
+        showMessage('Code-barres détecté : ' + text, 'success');
+        stopScanner(field);
+        return true;
+      }
+
+      async function scanFrame() {
+        if (finished || scanning || !preview.videoWidth) return;
+        scanning = true;
+        try {
+          const vw = preview.videoWidth;
+          const vh = preview.videoHeight;
+          const sx = Math.floor(vw * 0.02);
+          const sw = Math.floor(vw * 0.96);
+          const bands = [
+            { y: 0.16, h: 0.28 },
+            { y: 0.36, h: 0.28 },
+            { y: 0.56, h: 0.28 }
+          ];
+          const scale = vw < 1500 ? 2.0 : 1.5;
+
+          for (const band of bands) {
+            if (finished) break;
+            const sy = Math.max(0, Math.floor(vh * band.y));
+            const sh = Math.min(vh - sy, Math.floor(vh * band.h));
+            if (sh < 40) continue;
+            const dw = Math.min(3600, Math.floor(sw * scale));
+            const dh = Math.min(900, Math.floor(sh * scale));
+
+            resizeCanvas(canvas, dw, dh);
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.imageSmoothingEnabled = false;
+            ctx.clearRect(0, 0, dw, dh);
+            ctx.drawImage(preview, sx, sy, sw, sh, 0, 0, dw, dh);
+
+            let text = decodeCanvas(canvas);
+            if (accept(text)) break;
+
+            resizeCanvas(contrastCanvas, dw, dh);
+            contrastCtx.setTransform(1, 0, 0, 1, 0, 0);
+            contrastCtx.imageSmoothingEnabled = false;
+            contrastCtx.filter = 'grayscale(1) contrast(1.55)';
+            contrastCtx.clearRect(0, 0, dw, dh);
+            contrastCtx.drawImage(preview, sx, sy, sw, sh, 0, 0, dw, dh);
+            contrastCtx.filter = 'none';
+
+            text = decodeCanvas(contrastCanvas);
+            if (accept(text)) break;
+          }
+        } finally {
+          scanning = false;
+        }
+      }
+
+      activeScanner = {
+        reader: barcodeReader,
+        controls: null,
+        stream: stream,
+        video: preview,
+        timer: null,
+        customCanvasScanner: true
+      };
       activeScannerType = 'zxing';
 
-      // Affichage d'une mire adaptée au Code 128.
-      const video = preview;
-      if (video) {
-        video.setAttribute('playsinline', 'true');
-        video.setAttribute('autoplay', 'true');
-        video.muted = true;
-        video.style.width = '100%';
-        video.style.display = 'block';
-        video.style.objectFit = 'cover';
-        video.style.aspectRatio = '16 / 9';
-      }
+      preview.style.width = '100%';
+      preview.style.display = 'block';
+      preview.style.objectFit = 'cover';
+      preview.style.aspectRatio = '16 / 9';
+
+      await scanFrame();
+      timer = setInterval(scanFrame, 330);
+      activeScanner.timer = timer;
+
+      setTimeout(() => {
+        if (activeScanner && activeScanner.video === preview) setCameraFocus();
+      }, 500);
 
     } catch (error) {
       console.error('ZXing Code 128:', error);
       showMessage(
-        "Impossible d'utiliser la caméra pour le Code 128. Vérifiez l'autorisation caméra." +
+        "Impossible d'utiliser la caméra pour le Code 128." +
         (error && error.message ? ' (' + error.message + ')' : ''),
         'error'
       );
@@ -873,7 +933,6 @@ async function startScanner(field, mode = 'qr') {
       activeScannerType = null;
       activeField = null;
     }
-
     return;
   }
 
@@ -1033,8 +1092,19 @@ async function stopScanner(field) {
   }
 
   try {
-    if (typeToStop === 'zxing' && scannerToStop.controls) {
-      scannerToStop.controls.stop();
+    if (typeToStop === 'zxing') {
+      if (scannerToStop.timer) {
+        clearInterval(scannerToStop.timer);
+        scannerToStop.timer = null;
+      }
+      if (scannerToStop.controls) scannerToStop.controls.stop();
+      if (scannerToStop.stream) {
+        scannerToStop.stream.getTracks().forEach(track => track.stop());
+      }
+      if (scannerToStop.video) {
+        try { scannerToStop.video.pause(); } catch (e) {}
+        scannerToStop.video.srcObject = null;
+      }
     } else if (typeToStop === 'html5' && scannerToStop.stop) {
       await scannerToStop.stop();
       try { scannerToStop.clear(); } catch (e) {}
