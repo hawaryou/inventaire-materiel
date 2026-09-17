@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1.0">
+
+  <title>Inventaire du matériel</title>
+
+  <!-- Bibliothèque de lecture des codes-barres -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+  <style>
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 15px;
+      background: #f3f4f6;
+      font-family: Arial, sans-serif;
+      color: #222;
+    }
+
+    .container {
+      max-width: 600px;
+      margin: auto;
+    }
+
+    h1 {
+      text-align: center;
+      margin: 10px 0 25px;
+    }
+
+    .card {
+      background: white;
+      padding: 18px;
+      margin-bottom: 15px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+
+    label {
+      display: block;
+      font-weight: bold;
+      margin-bottom: 7px;
+    }
+
+    .required {
+      color: #d93025;
+    }
+
+    input {
+      width: 100%;
+      padding: 13px;
+      border: 1px solid #bbb;
+      border-radius: 7px;
+      font-size: 17px;
+      margin-bottom: 10px;
+    }
+
+    .scan-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    .scan-row input {
+      flex: 1;
+      margin-bottom: 0;
+    }
+
+    button {
+      border: none;
+      border-radius: 8px;
+      padding: 13px 16px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    .scan-button {
+      background: #4f46e5;
+      color: white;
+      white-space: nowrap;
+    }
+
+    .continue-button {
+      width: 100%;
+      background: #188038;
+      color: white;
+      font-size: 18px;
+      font-weight: bold;
+      padding: 17px;
+    }
+
+    .stop-button {
+      display: block;
+      margin: 10px auto 0;
+      background: #d93025;
+      color: white;
+    }
+
+    .scanner {
+      display: none;
+      margin-top: 12px;
+      padding: 10px;
+      background: #000;
+      border-radius: 10px;
+    }
+
+    .scanner-title {
+      color: white;
+      text-align: center;
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+
+    .help {
+      color: #666;
+      font-size: 13px;
+      margin-top: 5px;
+    }
+
+    .message {
+      display: none;
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 15px;
+      text-align: center;
+      font-weight: bold;
+    }
+
+    .success {
+      display: block;
+      background: #d9ead3;
+      color: #137333;
+    }
+
+    .error {
+      display: block;
+      background: #fce8e6;
+      color: #c5221f;
+    }
+
+    .info {
+      display: block;
+      background: #e8f0fe;
+      color: #174ea6;
+    }
+
+    @media (max-width: 500px) {
+
+      .scan-row {
+        flex-direction: column;
+      }
+
+      .scan-button {
+        width: 100%;
+      }
+
+    }
+
+  </style>
+
+</head>
+
+<body>
+
+<div class="container">
+
+  <h1>Inventaire du matériel</h1>
+
+  <div id="message" class="message"></div>
+
+
+  <!-- ============================= -->
+  <!-- INFORMATIONS GENERALES -->
+  <!-- ============================= -->
+
+  <div class="card">
+
+    <label for="foyer">
+      Foyer <span class="required">*</span>
+    </label>
+
+    <input
+      id="foyer"
+      type="text"
+      placeholder="Nom du foyer"
+      autocomplete="organization">
+
+
+    <label for="nom">
+      Nom <span class="required">*</span>
+    </label>
+
+    <input
+      id="nom"
+      type="text"
+      placeholder="Nom"
+      autocomplete="name">
+
+
+    <label for="chambre">
+      Chambre <span class="required">*</span>
+    </label>
+
+    <input
+      id="chambre"
+      type="text"
+      placeholder="Numéro de chambre">
+
+  </div>
+
+
+  <!-- ============================= -->
+  <!-- LIT -->
+  <!-- ============================= -->
+
+  <div class="card">
+
+    <label for="lit">
+      Lit SN <span class="required">*</span>
+    </label>
+
+    <div class="scan-row">
+
+      <input
+        id="lit"
+        type="text"
+        inputmode="numeric"
+        maxlength="13"
+        placeholder="EAN-13 du lit">
+
+      <button
+        class="scan-button"
+        onclick="startScanner('lit')">
+
+        📷 Scanner
+
+      </button>
+
+    </div>
+
+    <div class="help">
+      Obligatoire
+    </div>
+
+    <div
+      id="scanner-lit"
+      class="scanner">
+
+      <div class="scanner-title">
+        Scanner le code-barres du LIT
+      </div>
+
+      <div id="reader-lit"></div>
+
+      <button
+        class="stop-button"
+        onclick="stopScanner('lit')">
+
+        Fermer la caméra
+
+      </button>
+
+    </div>
+
+  </div>
+
+
+  <!-- ============================= -->
+  <!-- POTENCE -->
+  <!-- ============================= -->
+
+  <div class="card">
+
+    <label for="potence">
+      Potence SN
+    </label>
+
+    <div class="scan-row">
+
+      <input
+        id="potence"
+        type="text"
+        inputmode="numeric"
+        maxlength="13"
+        placeholder="EAN-13 de la potence">
+
+      <button
+        class="scan-button"
+        onclick="startScanner('potence')">
+
+        📷 Scanner
+
+      </button>
+
+    </div>
+
+    <div class="help">
+      Facultatif
+    </div>
+
+    <div
+      id="scanner-potence"
+      class="scanner">
+
+      <div class="scanner-title">
+        Scanner le code-barres de la POTENCE
+      </div>
+
+      <div id="reader-potence"></div>
+
+      <button
+        class="stop-button"
+        onclick="stopScanner('potence')">
+
+        Fermer la caméra
+
+      </button>
+
+    </div>
+
+  </div>
+
+
+  <!-- ============================= -->
+  <!-- BARRIERE -->
+  <!-- ============================= -->
+
+  <div class="card">
+
+    <label for="barriere">
+      Barrière SN
+    </label>
+
+    <div class="scan-row">
+
+      <input
+        id="barriere"
+        type="text"
+        inputmode="numeric"
+        maxlength="13"
+        placeholder="EAN-13 de la barrière">
+
+      <button
+        class="scan-button"
+        onclick="startScanner('barriere')">
+
+        📷 Scanner
+
+      </button>
+
+    </div>
+
+    <div class="help">
+      Facultatif
+    </div>
+
+    <div
+      id="scanner-barriere"
+      class="scanner">
+
+      <div class="scanner-title">
+        Scanner le code-barres de la BARRIÈRE
+      </div>
+
+      <div id="reader-barriere"></div>
+
+      <button
+        class="stop-button"
+        onclick="stopScanner('barriere')">
+
+        Fermer la caméra
+
+      </button>
+
+    </div>
+
+  </div>
+
+
+  <!-- ============================= -->
+  <!-- MATELAS -->
+  <!-- ============================= -->
+
+  <div class="card">
+
+    <label for="matelas">
+      Matelas à air SN
+    </label>
+
+    <div class="scan-row">
+
+      <input
+        id="matelas"
+        type="text"
+        inputmode="numeric"
+        maxlength="13"
+        placeholder="EAN-13 du matelas">
+
+      <button
+        class="scan-button"
+        onclick="startScanner('matelas')">
+
+        📷 Scanner
+
+      </button>
+
+    </div>
+
+    <div class="help">
+      Facultatif
+    </div>
+
+    <div
+      id="scanner-matelas"
+      class="scanner">
+
+      <div class="scanner-title">
+        Scanner le code-barres du MATELAS À AIR
+      </div>
+
+      <div id="reader-matelas"></div>
+
+      <button
+        class="stop-button"
+        onclick="stopScanner('matelas')">
+
+        Fermer la caméra
+
+      </button>
+
+    </div>
+
+  </div>
+
+
+  <!-- ============================= -->
+  <!-- BOUTON FINAL -->
+  <!-- ============================= -->
+
+  <div class="card">
+
+    <button
+      class="continue-button"
+      onclick="openGoogleForm()">
+
+      Continuer vers le formulaire
+
+    </button>
+
+  </div>
+
+</div>
+
+
+<script>
+
+
+/* ==========================================================
+   GOOGLE FORM
+   ========================================================== */
+
+const GOOGLE_FORM_URL =
+  "https://docs.google.com/forms/d/e/1FAIpQLSfe21uOKi4dTW2KQIdEnEFpxCsv6kwpwppbYRs9bVtykDYeCQ/viewform";
+
+
+/* ==========================================================
+   IDENTIFIANTS DES QUESTIONS GOOGLE FORMS
+   ========================================================== */
+
+const ENTRY = {
+
+  foyer:
+    "entry.358264119",
+
+  nom:
+    "entry.1190830405",
+
+  chambre:
+    "entry.1451593184",
+
+  lit:
+    "entry.2011644043",
+
+  potence:
+    "entry.904645354",
+
+  barriere:
+    "entry.426464072",
+
+  matelas:
+    "entry.1812177639"
+
+};
+
+
+/* ==========================================================
+   VARIABLES DU SCANNER
+   ========================================================== */
+
+let activeScanner = null;
+
+let activeField = null;
+
+
+/* ==========================================================
+   MESSAGE
+   ========================================================== */
+
+function showMessage(text, type) {
+
+  const element =
+    document.getElementById("message");
+
+  element.textContent = text;
+
+  element.className =
+    "message " + type;
+
+}
+
+
+/* ==========================================================
+   VALIDATION EAN-13
+   ========================================================== */
+
+function isValidEAN13(code) {
+
+  if (!/^\d{13}$/.test(code)) {
+    return false;
+  }
+
+  let sum = 0;
+
+  for (let i = 0; i < 12; i++) {
+
+    const digit =
+      parseInt(code.charAt(i), 10);
+
+    if (i % 2 === 0) {
+
+      sum += digit;
+
+    } else {
+
+      sum += digit * 3;
+
+    }
+
+  }
+
+  const checkDigit =
+    (10 - (sum % 10)) % 10;
+
+  return (
+    checkDigit ===
+    parseInt(code.charAt(12), 10)
+  );
+
+}
+
+
+/* ==========================================================
+   DEMARRER LE SCANNER
+   ========================================================== */
+
+function startScanner(field) {
+
+  if (activeScanner) {
+
+    stopScanner(activeField);
+
+  }
+
+  activeField = field;
+
+
+  const scannerContainer =
+    document.getElementById(
+      "scanner-" + field
+    );
+
+  scannerContainer.style.display =
+    "block";
+
+
+  const readerId =
+    "reader-" + field;
+
+
+  activeScanner =
+    new Html5Qrcode(readerId);
+
+
+  const config = {
+
+    fps: 10,
+
+    qrbox: function(width, height) {
+
+      return {
+
+        width: Math.min(width * 0.90, 500),
+
+        height: Math.min(height * 0.35, 180)
+
+      };
+
+    },
+
+    formatsToSupport: [
+
+      Html5QrcodeSupportedFormats.EAN_13
+
+    ]
+
+  };
+
+
+  activeScanner.start(
+
+    {
+      facingMode: "environment"
+    },
+
+    config,
+
+    function(decodedText) {
+
+      /* Vérification EAN-13 */
+
+      if (!isValidEAN13(decodedText)) {
+
+        showMessage(
+          "Le code lu n'est pas un EAN-13 valide.",
+          "error"
+        );
+
+        return;
+
+      }
+
+
+      /* Inscription dans le champ */
+
+      document.getElementById(field).value =
+        decodedText;
+
+
+      showMessage(
+        "Code enregistré : " + decodedText,
+        "success"
+      );
+
+
+      stopScanner(field);
+
+    },
+
+    function(errorMessage) {
+
+      /*
+       * Les erreurs de lecture sont normales
+       * lorsque la caméra cherche le code.
+       *
+       * On ne les affiche donc pas.
+       */
+
+    }
+
+  ).catch(function(error) {
+
+    console.error(error);
+
+    showMessage(
+      "Impossible d'utiliser la caméra. Vérifiez l'autorisation caméra du navigateur.",
+      "error"
+    );
+
+    scannerContainer.style.display =
+      "none";
+
+    activeScanner = null;
+
+    activeField = null;
+
+  });
+
+}
+
+
+/* ==========================================================
+   ARRETER LE SCANNER
+   ========================================================== */
+
+function stopScanner(field) {
+
+  const scannerContainer =
+    document.getElementById(
+      "scanner-" + field
+    );
+
+
+  if (!activeScanner) {
+
+    scannerContainer.style.display =
+      "none";
+
+    return;
+
+  }
+
+
+  activeScanner.stop()
+
+    .then(function() {
+
+      activeScanner.clear();
+
+      activeScanner = null;
+
+      activeField = null;
+
+      scannerContainer.style.display =
+        "none";
+
+    })
+
+    .catch(function(error) {
+
+      console.error(error);
+
+      activeScanner = null;
+
+      activeField = null;
+
+      scannerContainer.style.display =
+        "none";
+
+    });
+
+}
+
+
+/* ==========================================================
+   OUVERTURE DU GOOGLE FORM
+   ========================================================== */
+
+function openGoogleForm() {
+
+
+  /* -----------------------------------------
+     Récupération des champs
+     ----------------------------------------- */
+
+  const foyer =
+    document.getElementById("foyer")
+      .value.trim();
+
+
+  const nom =
+    document.getElementById("nom")
+      .value.trim();
+
+
+  const chambre =
+    document.getElementById("chambre")
+      .value.trim();
+
+
+  const lit =
+    document.getElementById("lit")
+      .value.trim();
+
+
+  const potence =
+    document.getElementById("potence")
+      .value.trim();
+
+
+  const barriere =
+    document.getElementById("barriere")
+      .value.trim();
+
+
+  const matelas =
+    document.getElementById("matelas")
+      .value.trim();
+
+
+  /* -----------------------------------------
+     Vérification des champs obligatoires
+     ----------------------------------------- */
+
+  if (!foyer) {
+
+    showMessage(
+      "Veuillez renseigner le foyer.",
+      "error"
+    );
+
+    return;
+
+  }
+
+
+  if (!nom) {
+
+    showMessage(
+      "Veuillez renseigner le nom.",
+      "error"
+    );
+
+    return;
+
+  }
+
+
+  if (!chambre) {
+
+    showMessage(
+      "Veuillez renseigner la chambre.",
+      "error"
+    );
+
+    return;
+
+  }
+
+
+  if (!lit) {
+
+    showMessage(
+      "Le Lit SN doit obligatoirement être scanné.",
+      "error"
+    );
+
+    return;
+
+  }
+
+
+  if (!isValidEAN13(lit)) {
+
+    showMessage(
+      "Le Lit SN doit être un EAN-13 valide.",
+      "error"
+    );
+
+    return;
+
+  }
+
+
+  /* -----------------------------------------
+     Création de l'URL Google Forms
+     ----------------------------------------- */
+
+  let url =
+    GOOGLE_FORM_URL +
+    "?usp=pp_url";
+
+
+  /* Foyer */
+
+  url +=
+    "&" +
+    ENTRY.foyer +
+    "=" +
+    encodeURIComponent(foyer);
+
+
+  /* Nom */
+
+  url +=
+    "&" +
+    ENTRY.nom +
+    "=" +
+    encodeURIComponent(nom);
+
+
+  /* Chambre */
+
+  url +=
+    "&" +
+    ENTRY.chambre +
+    "=" +
+    encodeURIComponent(chambre);
+
+
+  /* Lit */
+
+  url +=
+    "&" +
+    ENTRY.lit +
+    "=" +
+    encodeURIComponent(lit);
+
+
+  /* Potence */
+
+  if (potence) {
+
+    if (!isValidEAN13(potence)) {
+
+      showMessage(
+        "Le code de la potence n'est pas un EAN-13 valide.",
+        "error"
+      );
+
+      return;
+
+    }
+
+    url +=
+      "&" +
+      ENTRY.potence +
+      "=" +
+      encodeURIComponent(potence);
+
+  }
+
+
+  /* Barrière */
+
+  if (barriere) {
+
+    if (!isValidEAN13(barriere)) {
+
+      showMessage(
+        "Le code de la barrière n'est pas un EAN-13 valide.",
+        "error"
+      );
+
+      return;
+
+    }
+
+    url +=
+      "&" +
+      ENTRY.barriere +
+      "=" +
+      encodeURIComponent(barriere);
+
+  }
+
+
+  /* Matelas */
+
+  if (matelas) {
+
+    if (!isValidEAN13(matelas)) {
+
+      showMessage(
+        "Le code du matelas n'est pas un EAN-13 valide.",
+        "error"
+      );
+
+      return;
+
+    }
+
+    url +=
+      "&" +
+      ENTRY.matelas +
+      "=" +
+      encodeURIComponent(matelas);
+
+  }
+
+
+  /* -----------------------------------------
+     Ouverture du Google Form
+     ----------------------------------------- */
+
+  window.location.href = url;
+
+}
+
+
+</script>
+
+</body>
+</html>
