@@ -783,8 +783,20 @@ async function startScanner(field, mode = 'qr') {
       // certains appareils refusent la piste vidéo avec ces contraintes.
       // On demande d'abord uniquement la caméra arrière et laisse Safari
       // choisir la résolution réellement disponible.
-      const preview = document.getElementById(readerId);
-      preview.className = 'reader barcode-reader';
+      const previewContainer = document.getElementById(readerId);
+      previewContainer.className = 'reader barcode-reader';
+      previewContainer.innerHTML = '';
+
+      // IMPORTANT iPhone/Safari : ZXing attend ici un vrai <video>,
+      // pas le <div> qui contient le lecteur.
+      // Passer le <div> provoque exactement :
+      // "Couldn't get videoElement from videoSource!"
+      const preview = document.createElement('video');
+      preview.setAttribute('autoplay', 'true');
+      preview.setAttribute('muted', 'true');
+      preview.setAttribute('playsinline', 'true');
+      preview.muted = true;
+      previewContainer.appendChild(preview);
 
       const callback = function(result, error) {
           if (finished || !result) return;
@@ -838,7 +850,7 @@ async function startScanner(field, mode = 'qr') {
       activeScannerType = 'zxing';
 
       // Affichage d'une mire adaptée au Code 128.
-      const video = preview.querySelector('video');
+      const video = preview;
       if (video) {
         video.setAttribute('playsinline', 'true');
         video.setAttribute('autoplay', 'true');
