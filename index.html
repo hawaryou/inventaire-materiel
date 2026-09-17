@@ -779,22 +779,14 @@ async function startScanner(field, mode = 'qr') {
       let lastAt = 0;
       let finished = false;
 
-      const constraints = {
-        video: {
-          facingMode: { ideal: 'environment' },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-          frameRate: { ideal: 30, max: 30 }
-        }
-      };
-
+      // Sur iPhone/Safari, ne pas imposer 1920x1080 + 30 fps à l'ouverture :
+      // certains appareils refusent la piste vidéo avec ces contraintes.
+      // On demande d'abord uniquement la caméra arrière et laisse Safari
+      // choisir la résolution réellement disponible.
       const preview = document.getElementById(readerId);
       preview.className = 'reader barcode-reader';
 
-      const controls = await barcodeReader.decodeFromConstraints(
-        constraints,
-        preview,
-        function(result, error) {
+      const callback = function(result, error) {
           if (finished || !result) return;
 
           const text = result.getText ? result.getText().trim() : String(result.text || '').trim();
@@ -818,8 +810,29 @@ async function startScanner(field, mode = 'qr') {
           document.getElementById(field).value = text;
           showMessage('Code-barres détecté : ' + text, 'success');
           stopScanner(field);
-        }
-      );
+        };
+
+      let controls;
+      try {
+        controls = await barcodeReader.decodeFromConstraints(
+          {
+            video: {
+              facingMode: { ideal: 'environment' }
+            }
+          },
+          preview,
+          callback
+        );
+      } catch (firstError) {
+        console.warn('ZXing caméra arrière avec contrainte simple:', firstError);
+
+        // Fallback iPhone : aucune contrainte de caméra.
+        controls = await barcodeReader.decodeFromConstraints(
+          { video: true },
+          preview,
+          callback
+        );
+      }
 
       activeScanner = { reader: barcodeReader, controls: controls };
       activeScannerType = 'zxing';
