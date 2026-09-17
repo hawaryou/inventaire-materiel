@@ -7,6 +7,7 @@
 
   <!-- Lecteur EAN-13 / CODE 128 / QR -->
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script src="https://unpkg.com/@zxing/browser@0.2.1/umd/zxing-browser.min.js"></script>
 
   <style>
     * { box-sizing: border-box; }
@@ -158,6 +159,26 @@
 
 .reader {
       width: 100%;
+    }
+
+
+    .barcode-reader {
+      position: relative;
+      background: #000;
+      min-height: 220px;
+    }
+
+    .barcode-reader::after {
+      content: "";
+      position: absolute;
+      left: 3%;
+      right: 3%;
+      top: 42%;
+      height: 18%;
+      border: 3px solid rgba(255,255,255,.9);
+      border-radius: 8px;
+      box-shadow: 0 0 0 9999px rgba(0,0,0,.18);
+      pointer-events: none;
     }
 
     .help {
@@ -675,6 +696,7 @@ const SUPPORTED_FORMATS = [
 
 let activeScanner = null;
 let activeField = null;
+let activeScannerType = null;
 
 
 /* ==========================================================
@@ -703,8 +725,7 @@ async function startScanner(field, mode = 'qr') {
 
   activeField = field;
 
-  const scannerContainer =
-    document.getElementById("scanner-" + field);
+  const scannerContainer = document.getElementById("scanner-" + field);
 
   scannerContainer.style.display = "block";
 
@@ -723,246 +744,241 @@ async function startScanner(field, mode = 'qr') {
   }
 
   const readerId = "reader-" + field;
-
-  // Nettoyage préventif
   const reader = document.getElementById(readerId);
   reader.innerHTML = "";
 
-  activeScanner = new Html5Qrcode(readerId);
-
-  /*
-   * Zone volontairement large et horizontale.
-   *
-   * C'est important pour les Code 128 longs comme celui
-   * montré sur la photo.
-   */
-  /*
-   * Deux modes séparés pour éviter de demander au moteur de chercher
-   * simultanément un QR carré et un long Code 128. Cela améliore la
-   * précision et réduit les fausses détections.
-   */
   const isQrMode = mode === 'qr';
-
   const title = scannerContainer.querySelector('.scanner-title');
   if (title) {
     title.textContent = isQrMode
       ? 'Scanner le QR Code — mode précis'
-      : 'Scanner le code-barres — mode précis';
+      : 'Scanner le CODE 128 — mode haute précision';
   }
 
-  const formats = isQrMode
-    ? [Html5QrcodeSupportedFormats.QR_CODE]
-    : [
-        Html5QrcodeSupportedFormats.CODE_128,
-        Html5QrcodeSupportedFormats.EAN_13
-      ];
+  /*
+   * QR : html5-qrcode reste utilisé.
+   * Code-barres : on utilise directement ZXing Browser 0.2.1.
+   * Cette version récente améliore le décodage des codes 1D et permet
+   * un lecteur dédié aux codes-barres au lieu de mélanger QR + 1D.
+   */
+  if (!isQrMode) {
+    if (!window.ZXingBrowser || !window.ZXingBrowser.BrowserMultiFormatOneDReader) {
+      showMessage("Le lecteur Code 128 n'est pas chargé. Rechargez la page.", "error");
+      scannerContainer.style.display = "none";
+      activeField = null;
+      return;
+    }
+
+    try {
+      const barcodeReader = new ZXingBrowser.BrowserMultiFormatOneDReader();
+      activeScanner = barcodeReader;
+      activeScannerType = 'zxing';
+
+      let lastText = '';
+      let confirmations = 0;
+      let lastAt = 0;
+      let finished = false;
+
+      const constraints = {
+        video: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          frameRate: { ideal: 30, max: 30 }
+        }
+      };
+
+      const preview = document.getElementById(readerId);
+      preview.className = 'reader barcode-reader';
+
+      const controls = await barcodeReader.decodeFromConstraints(
+        constraints,
+        preview,
+        function(result, error) {
+          if (finished || !result) return;
+
+          const text = result.getText ? result.getText().trim() : String(result.text || '').trim();
+          if (!text) return;
+
+          const now = Date.now();
+
+          // 2 lectures identiques rapprochées suffisent : on évite ici
+          // d'imposer 3-4 secondes de délai à l'utilisateur.
+          if (text === lastText && now - lastAt < 1500) {
+            confirmations++;
+          } else {
+            lastText = text;
+            confirmations = 1;
+          }
+          lastAt = now;
+
+          if (confirmations < 2) return;
+
+          finished = true;
+          document.getElementById(field).value = text;
+          showMessage('Code-barres détecté : ' + text, 'success');
+          stopScanner(field);
+        }
+      );
+
+      activeScanner = { reader: barcodeReader, controls: controls };
+      activeScannerType = 'zxing';
+
+      // Affichage d'une mire adaptée au Code 128.
+      const video = preview.querySelector('video');
+      if (video) {
+        video.setAttribute('playsinline', 'true');
+        video.setAttribute('autoplay', 'true');
+        video.muted = true;
+        video.style.width = '100%';
+        video.style.display = 'block';
+        video.style.objectFit = 'cover';
+        video.style.aspectRatio = '16 / 9';
+      }
+
+    } catch (error) {
+      console.error('ZXing Code 128:', error);
+      showMessage(
+        "Impossible d'utiliser la caméra pour le Code 128. Vérifiez l'autorisation caméra." +
+        (error && error.message ? ' (' + error.message + ')' : ''),
+        'error'
+      );
+      scannerContainer.style.display = 'none';
+      activeScanner = null;
+      activeScannerType = null;
+      activeField = null;
+    }
+
+    return;
+  }
+
+  /* ========================= QR CODE ========================= */
+
+  activeScanner = new Html5Qrcode(readerId, {
+    formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE]
+  });
+  activeScannerType = 'html5';
 
   const config = {
-
-    // 10 fps est un bon compromis sur mobile ; la précision vient
-    // surtout du format ciblé et de la zone de lecture.
-    fps: isQrMode ? 10 : 8,
-
-    formatsToSupport: formats,
-
+    fps: 10,
+    formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
     useBarCodeDetectorIfSupported: false,
-
     aspectRatio: 16 / 9,
-
-    // Sur iPhone, demander une définition élevée aide beaucoup pour les
-    // petits traits d'un Code 128. Le navigateur peut ajuster ces valeurs.
     videoConstraints: {
       facingMode: { ideal: "environment" },
       width: { ideal: 1920 },
       height: { ideal: 1080 },
-      frameRate: { ideal: 30, max: 30 },
-      focusMode: { ideal: "continuous" },
-      resizeMode: "none"
+      frameRate: { ideal: 30, max: 30 }
     },
-
     qrbox: function(width, height) {
-
-      if (isQrMode) {
-        // QR : zone presque carrée, centrée et suffisamment grande.
-        const size = Math.min(
-          Math.floor(width * 0.72),
-          Math.floor(height * 0.72),
-          520
-        );
-
-        return {
-          width: size,
-          height: size
-        };
-      }
-
-      // Code-barres : zone très large et peu haute, idéale pour
-      // les longs Code 128 / EAN-13.
-      return {
-        width: Math.min(Math.floor(width * 0.98), 900),
-        height: Math.min(Math.floor(height * 0.42), 240)
-      };
-
+      const size = Math.min(
+        Math.floor(width * 0.72),
+        Math.floor(height * 0.72),
+        520
+      );
+      return { width: size, height: size };
     }
-
   };
 
-  // On demande deux lectures identiques avant de valider le résultat.
   let lastDecodedText = null;
   let lastDecodedAt = 0;
-
 
   activeScanner.start(
     { facingMode: "environment" },
     config,
-
-    function(decodedText, decodedResult) {
-
-      if (!decodedText) {
-        return;
-      }
+    function(decodedText) {
+      if (!decodedText) return;
 
       const cleanText = decodedText.trim();
       const now = Date.now();
 
-      /*
-       * Anti-fausse-détection : le même résultat doit être vu deux fois
-       * à moins de 1,2 seconde d'intervalle. Cela rend la lecture plus
-       * fiable, notamment avec les reflets ou les étiquettes brillantes.
-       */
       if (cleanText !== lastDecodedText || now - lastDecodedAt > 1200) {
         lastDecodedText = cleanText;
         lastDecodedAt = now;
         return;
       }
 
-      // Code 128 : confirmation renforcée, mais sans ralentir excessivement
-      // l'utilisateur. Le même texte doit être reconnu 3 fois en moins de 2 s.
-      if (!isQrMode) {
-        const c = window.__barcodeConfirm;
-        if (!c || c.text !== cleanText || now - c.firstAt > 2000) {
-          window.__barcodeConfirm = { text: cleanText, firstAt: now, count: 1 };
-          return;
-        }
-        c.count++;
-        c.lastAt = now;
-        if (c.count < 3) return;
-      }
-
-      /*
-       * Le résultat est accepté uniquement dans le mode choisi :
-       * QR_CODE ou CODE_128 / EAN_13.
-       */
-      document.getElementById(field).value =
-        cleanText;
-
-      let formatName = "";
-
-      try {
-        if (
-          decodedResult &&
-          decodedResult.result &&
-          decodedResult.result.format
-        ) {
-          formatName =
-            decodedResult.result.format.formatName || "";
-        }
-      } catch (e) {
-        formatName = "";
-      }
-
-      showMessage(
-        "Code enregistré" +
-        (formatName ? " (" + formatName + ")" : "") +
-        " : " + cleanText,
-        "success"
-      );
-
+      document.getElementById(field).value = cleanText;
+      showMessage("QR Code enregistré : " + cleanText, "success");
       stopScanner(field);
-
     },
-
-    function(errorMessage) {
-      /*
-       * Les erreurs de recherche sont normales pendant
-       * que la caméra analyse les images.
-       */
-    }
-
+    function() {}
   ).catch(function(error) {
-
     console.error(error);
-
-    let detail = "";
-
-    if (error && error.message) {
-      detail = " (" + error.message + ")";
-    }
-
     showMessage(
-      "Impossible d'utiliser la caméra. Vérifiez l'autorisation caméra, que le site est en HTTPS et que le navigateur a accès à la caméra." + detail,
+      "Impossible d'utiliser la caméra. Vérifiez l'autorisation caméra et le HTTPS." +
+      (error && error.message ? " (" + error.message + ")" : ""),
       "error"
     );
-
     scannerContainer.style.display = "none";
-
     activeScanner = null;
+    activeScannerType = null;
     activeField = null;
-
   });
-
 }
 
 
 /* ==========================================================
-   ZOOM CAMERA POUR QR CODE
+   CONTROLES CAMERA
    ========================================================== */
 
-async function setCameraZoom(targetZoom) {
+function getActiveVideoTrack() {
+  if (!activeField) return null;
+  const video = document.querySelector('#reader-' + activeField + ' video');
+  if (!video || !video.srcObject) return null;
+  const tracks = video.srcObject.getVideoTracks();
+  return tracks && tracks.length ? tracks[0] : null;
+}
 
-  if (!activeScanner) return;
+async function setCameraZoom(targetZoom) {
+  const track = getActiveVideoTrack();
+  if (!track) return;
 
   try {
-    const capabilities = activeScanner.getRunningTrackCameraCapabilities();
-    const z = capabilities && capabilities.zoomFeature;
+    const capabilities = track.getCapabilities ? track.getCapabilities() : {};
+    const z = capabilities && capabilities.zoom;
 
     if (!z) {
       showMessage(
-        "Le zoom matériel n'est pas disponible. Approchez le téléphone du code sans le couper.",
+        "Le zoom matériel n'est pas disponible sur cet iPhone. Approchez doucement le téléphone.",
         "info"
       );
       return;
     }
 
     const target = Math.min(z.max, Math.max(z.min, targetZoom));
-
-    await activeScanner.applyVideoConstraints({
-      advanced: [{ zoom: target }]
-    });
-
+    await track.applyConstraints({ advanced: [{ zoom: target }] });
     showMessage("Zoom caméra : ×" + target.toFixed(1), "info");
   } catch (error) {
     console.warn("Zoom caméra non disponible :", error);
     showMessage(
-      "L'iPhone ne permet pas de régler le zoom depuis cette page. Le lecteur continue en zoom automatique.",
+      "Le zoom n'est pas réglable depuis ce navigateur. Approchez le téléphone sans couper le code.",
       "info"
     );
   }
 }
 
 async function setCameraFocus() {
-
-  if (!activeScanner) return;
+  const track = getActiveVideoTrack();
+  if (!track) return;
 
   try {
-    await activeScanner.applyVideoConstraints({
-      advanced: [{ focusMode: "continuous" }]
-    });
-    showMessage("Autofocus continu activé. Maintenez le code stable 1 seconde.", "info");
+    const capabilities = track.getCapabilities ? track.getCapabilities() : {};
+
+    if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
+      await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+      showMessage("Autofocus continu activé. Maintenez le code stable 1 seconde.", "info");
+      return;
+    }
+
+    showMessage(
+      "L'autofocus continu n'est pas pilotable par Safari. L'iPhone garde sa mise au point automatique.",
+      "info"
+    );
   } catch (error) {
     console.warn("Autofocus continu non disponible :", error);
     showMessage(
-      "L'autofocus continu n'est pas réglable sur cet iPhone. Bougez très légèrement le téléphone jusqu'à obtenir une image nette.",
+      "L'autofocus est géré automatiquement par l'iPhone. Approchez lentement jusqu'à ce que les traits soient nets.",
       "info"
     );
   }
@@ -973,35 +989,36 @@ async function setCameraFocus() {
    ARRETER LE SCANNER
    ========================================================== */
 
-function stopScanner(field) {
+async function stopScanner(field) {
 
-  const scannerContainer =
-    document.getElementById("scanner-" + field);
+  const scannerContainer = field
+    ? document.getElementById("scanner-" + field)
+    : null;
 
   const scannerToStop = activeScanner;
+  const typeToStop = activeScannerType;
 
   activeScanner = null;
+  activeScannerType = null;
   activeField = null;
 
   if (!scannerToStop) {
-    scannerContainer.style.display = "none";
-    return Promise.resolve();
+    if (scannerContainer) scannerContainer.style.display = "none";
+    return;
   }
 
-  return scannerToStop.stop()
-    .catch(function(error) {
-      console.warn("Arrêt caméra :", error);
-    })
-    .then(function() {
+  try {
+    if (typeToStop === 'zxing' && scannerToStop.controls) {
+      scannerToStop.controls.stop();
+    } else if (typeToStop === 'html5' && scannerToStop.stop) {
+      await scannerToStop.stop();
+      try { scannerToStop.clear(); } catch (e) {}
+    }
+  } catch (error) {
+    console.warn("Arrêt caméra :", error);
+  }
 
-      try {
-        scannerToStop.clear();
-      } catch (e) {}
-
-      scannerContainer.style.display = "none";
-
-    });
-
+  if (scannerContainer) scannerContainer.style.display = "none";
 }
 
 
