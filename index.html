@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -769,13 +770,23 @@ async function startScanner(field, mode = 'qr') {
 
     // 10 fps est un bon compromis sur mobile ; la précision vient
     // surtout du format ciblé et de la zone de lecture.
-    fps: 10,
+    fps: isQrMode ? 10 : 8,
 
     formatsToSupport: formats,
 
     useBarCodeDetectorIfSupported: false,
 
     aspectRatio: 16 / 9,
+
+    // Sur iPhone, demander une définition élevée aide beaucoup pour les
+    // petits traits d'un Code 128. Le navigateur peut ajuster ces valeurs.
+    videoConstraints: {
+      facingMode: { ideal: "environment" },
+      width: { ideal: 1920 },
+      height: { ideal: 1080 },
+      frameRate: { ideal: 30, max: 30 },
+      focusMode: { ideal: "continuous" }
+    },
 
     qrbox: function(width, height) {
 
@@ -796,8 +807,8 @@ async function startScanner(field, mode = 'qr') {
       // Code-barres : zone très large et peu haute, idéale pour
       // les longs Code 128 / EAN-13.
       return {
-        width: Math.min(Math.floor(width * 0.94), 760),
-        height: Math.min(Math.floor(height * 0.34), 180)
+        width: Math.min(Math.floor(width * 0.98), 900),
+        height: Math.min(Math.floor(height * 0.42), 240)
       };
 
     }
@@ -827,10 +838,24 @@ async function startScanner(field, mode = 'qr') {
        * à moins de 1,2 seconde d'intervalle. Cela rend la lecture plus
        * fiable, notamment avec les reflets ou les étiquettes brillantes.
        */
-      if (cleanText !== lastDecodedText || now - lastDecodedAt > 900) {
+      if (cleanText !== lastDecodedText || now - lastDecodedAt > 1200) {
         lastDecodedText = cleanText;
         lastDecodedAt = now;
         return;
+      }
+
+      // Pour Code 128 sur iPhone, on demande une troisième confirmation
+      // seulement si le résultat vient d'être retrouvé rapidement.
+      if (!isQrMode) {
+        if (typeof window.__barcodeConfirm === "undefined" ||
+            window.__barcodeConfirm.text !== cleanText ||
+            now - window.__barcodeConfirm.at > 1500) {
+          window.__barcodeConfirm = { text: cleanText, at: now, count: 1 };
+          return;
+        }
+        window.__barcodeConfirm.count++;
+        window.__barcodeConfirm.at = now;
+        if (window.__barcodeConfirm.count < 3) return;
       }
 
       /*
