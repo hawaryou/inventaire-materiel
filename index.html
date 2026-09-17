@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -149,7 +148,7 @@
 
 .zoom-button {
   flex: 1;
-  min-width: 150px;
+  min-width: 105px;
   padding: 10px 12px;
   border: 1px solid #bbb;
   border-radius: 10px;
@@ -342,12 +341,10 @@
 
       <div class="scanner-tools">
 
-        <button
-          type="button"
-          class="zoom-button"
-          onclick="zoomCamera(1.5)">
-          🔎 Zoom caméra ×1,5
-        </button>
+        <button type="button" class="zoom-button" onclick="setCameraZoom(1)">🔎 1×</button>
+        <button type="button" class="zoom-button" onclick="setCameraZoom(1.5)">🔎 1,5×</button>
+        <button type="button" class="zoom-button" onclick="setCameraZoom(2)">🔎 2×</button>
+        <button type="button" class="zoom-button" onclick="setCameraFocus()">🎯 Autofocus</button>
 
         <button
           type="button"
@@ -430,12 +427,10 @@
 
       <div class="scanner-tools">
 
-        <button
-          type="button"
-          class="zoom-button"
-          onclick="zoomCamera(1.5)">
-          🔎 Zoom caméra ×1,5
-        </button>
+        <button type="button" class="zoom-button" onclick="setCameraZoom(1)">🔎 1×</button>
+        <button type="button" class="zoom-button" onclick="setCameraZoom(1.5)">🔎 1,5×</button>
+        <button type="button" class="zoom-button" onclick="setCameraZoom(2)">🔎 2×</button>
+        <button type="button" class="zoom-button" onclick="setCameraFocus()">🎯 Autofocus</button>
 
         <button
           type="button"
@@ -518,12 +513,10 @@
 
       <div class="scanner-tools">
 
-        <button
-          type="button"
-          class="zoom-button"
-          onclick="zoomCamera(1.5)">
-          🔎 Zoom caméra ×1,5
-        </button>
+        <button type="button" class="zoom-button" onclick="setCameraZoom(1)">🔎 1×</button>
+        <button type="button" class="zoom-button" onclick="setCameraZoom(1.5)">🔎 1,5×</button>
+        <button type="button" class="zoom-button" onclick="setCameraZoom(2)">🔎 2×</button>
+        <button type="button" class="zoom-button" onclick="setCameraFocus()">🎯 Autofocus</button>
 
         <button
           type="button"
@@ -606,12 +599,10 @@
 
       <div class="scanner-tools">
 
-        <button
-          type="button"
-          class="zoom-button"
-          onclick="zoomCamera(1.5)">
-          🔎 Zoom caméra ×1,5
-        </button>
+        <button type="button" class="zoom-button" onclick="setCameraZoom(1)">🔎 1×</button>
+        <button type="button" class="zoom-button" onclick="setCameraZoom(1.5)">🔎 1,5×</button>
+        <button type="button" class="zoom-button" onclick="setCameraZoom(2)">🔎 2×</button>
+        <button type="button" class="zoom-button" onclick="setCameraFocus()">🎯 Autofocus</button>
 
         <button
           type="button"
@@ -785,7 +776,8 @@ async function startScanner(field, mode = 'qr') {
       width: { ideal: 1920 },
       height: { ideal: 1080 },
       frameRate: { ideal: 30, max: 30 },
-      focusMode: { ideal: "continuous" }
+      focusMode: { ideal: "continuous" },
+      resizeMode: "none"
     },
 
     qrbox: function(width, height) {
@@ -844,18 +836,17 @@ async function startScanner(field, mode = 'qr') {
         return;
       }
 
-      // Pour Code 128 sur iPhone, on demande une troisième confirmation
-      // seulement si le résultat vient d'être retrouvé rapidement.
+      // Code 128 : confirmation renforcée, mais sans ralentir excessivement
+      // l'utilisateur. Le même texte doit être reconnu 3 fois en moins de 2 s.
       if (!isQrMode) {
-        if (typeof window.__barcodeConfirm === "undefined" ||
-            window.__barcodeConfirm.text !== cleanText ||
-            now - window.__barcodeConfirm.at > 1500) {
-          window.__barcodeConfirm = { text: cleanText, at: now, count: 1 };
+        const c = window.__barcodeConfirm;
+        if (!c || c.text !== cleanText || now - c.firstAt > 2000) {
+          window.__barcodeConfirm = { text: cleanText, firstAt: now, count: 1 };
           return;
         }
-        window.__barcodeConfirm.count++;
-        window.__barcodeConfirm.at = now;
-        if (window.__barcodeConfirm.count < 3) return;
+        c.count++;
+        c.lastAt = now;
+        if (c.count < 3) return;
       }
 
       /*
@@ -927,49 +918,54 @@ async function startScanner(field, mode = 'qr') {
    ZOOM CAMERA POUR QR CODE
    ========================================================== */
 
-async function zoomCamera(factor) {
+async function setCameraZoom(targetZoom) {
 
-  if (!activeScanner) {
-    return;
-  }
+  if (!activeScanner) return;
 
   try {
+    const capabilities = activeScanner.getRunningTrackCameraCapabilities();
+    const z = capabilities && capabilities.zoomFeature;
 
-    const capabilities =
-      activeScanner.getRunningTrackCameraCapabilities();
-
-    if (!capabilities || !capabilities.zoomFeature) {
+    if (!z) {
       showMessage(
-        "Le zoom caméra n'est pas disponible sur cet appareil. Approchez légèrement le téléphone du QR code.",
+        "Le zoom matériel n'est pas disponible. Approchez le téléphone du code sans le couper.",
         "info"
       );
       return;
     }
 
-    const zoom = capabilities.zoomFeature;
-    const current = zoom.value || zoom.min || 1;
-    const target = Math.min(
-      zoom.max,
-      Math.max(zoom.min, current * factor)
-    );
+    const target = Math.min(z.max, Math.max(z.min, targetZoom));
 
     await activeScanner.applyVideoConstraints({
       advanced: [{ zoom: target }]
     });
 
-    showMessage(
-      "Zoom caméra réglé à ×" + target.toFixed(1) + " pour faciliter la lecture du QR code.",
-      "info"
-    );
-
+    showMessage("Zoom caméra : ×" + target.toFixed(1), "info");
   } catch (error) {
     console.warn("Zoom caméra non disponible :", error);
     showMessage(
-      "Le zoom automatique n'est pas disponible sur ce téléphone.",
+      "L'iPhone ne permet pas de régler le zoom depuis cette page. Le lecteur continue en zoom automatique.",
       "info"
     );
   }
+}
 
+async function setCameraFocus() {
+
+  if (!activeScanner) return;
+
+  try {
+    await activeScanner.applyVideoConstraints({
+      advanced: [{ focusMode: "continuous" }]
+    });
+    showMessage("Autofocus continu activé. Maintenez le code stable 1 seconde.", "info");
+  } catch (error) {
+    console.warn("Autofocus continu non disponible :", error);
+    showMessage(
+      "L'autofocus continu n'est pas réglable sur cet iPhone. Bougez très légèrement le téléphone jusqu'à obtenir une image nette.",
+      "info"
+    );
+  }
 }
 
 
