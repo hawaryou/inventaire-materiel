@@ -139,7 +139,24 @@
       line-height: 1.4;
     }
 
-    .reader {
+    .scanner-tools {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.zoom-button {
+  flex: 1;
+  min-width: 150px;
+  padding: 10px 12px;
+  border: 1px solid #bbb;
+  border-radius: 10px;
+  background: #fff;
+  font-weight: 600;
+}
+
+.reader {
       width: 100%;
     }
 
@@ -270,12 +287,23 @@
         type="text"
         placeholder="Code du lit">
 
-      <button
-        type="button"
-        class="scan-button"
-        onclick="startScanner('lit')">
-        📷 Scanner
-      </button>
+      <div class="scan-choice">
+
+        <button
+          type="button"
+          class="scan-button"
+          onclick="startScanner('lit', 'qr')">
+          📷 QR précis
+        </button>
+
+        <button
+          type="button"
+          class="scan-button barcode-button"
+          onclick="startScanner('lit', 'barcode')">
+          📷 Code-barres
+        </button>
+
+      </div>
 
     </div>
 
@@ -307,16 +335,27 @@
       <div id="reader-lit" class="reader"></div>
 
       <div class="scan-hint">
-        Pour un Code 128 long : éloignez légèrement le téléphone,
-        gardez le code horizontal et évitez les reflets.
+        Mode QR : placez le QR dans le carré. Mode code-barres : gardez toute la
+        largeur du code visible et évitez les reflets.
       </div>
 
-      <button
-        type="button"
-        class="stop-button"
-        onclick="stopScanner('lit')">
-        Fermer la caméra
-      </button>
+      <div class="scanner-tools">
+
+        <button
+          type="button"
+          class="zoom-button"
+          onclick="zoomCamera(1.5)">
+          🔎 Zoom caméra ×1,5
+        </button>
+
+        <button
+          type="button"
+          class="stop-button"
+          onclick="stopScanner('lit')">
+          Fermer la caméra
+        </button>
+
+      </div>
 
     </div>
 
@@ -337,12 +376,23 @@
         type="text"
         placeholder="Code de la potence">
 
-      <button
-        type="button"
-        class="scan-button"
-        onclick="startScanner('potence')">
-        📷 Scanner
-      </button>
+      <div class="scan-choice">
+
+        <button
+          type="button"
+          class="scan-button"
+          onclick="startScanner('potence', 'qr')">
+          📷 QR précis
+        </button>
+
+        <button
+          type="button"
+          class="scan-button barcode-button"
+          onclick="startScanner('potence', 'barcode')">
+          📷 Code-barres
+        </button>
+
+      </div>
 
     </div>
 
@@ -374,15 +424,26 @@
       <div id="reader-potence" class="reader"></div>
 
       <div class="scan-hint">
-        Gardez tout le code-barres visible dans la zone.
+        QR : remplissez le carré sans couper les quatre coins. Code-barres : gardez toute la largeur visible.
       </div>
 
-      <button
-        type="button"
-        class="stop-button"
-        onclick="stopScanner('potence')">
-        Fermer la caméra
-      </button>
+      <div class="scanner-tools">
+
+        <button
+          type="button"
+          class="zoom-button"
+          onclick="zoomCamera(1.5)">
+          🔎 Zoom caméra ×1,5
+        </button>
+
+        <button
+          type="button"
+          class="stop-button"
+          onclick="stopScanner('potence')">
+          Fermer la caméra
+        </button>
+
+      </div>
 
     </div>
 
@@ -403,12 +464,23 @@
         type="text"
         placeholder="Code de la barrière">
 
-      <button
-        type="button"
-        class="scan-button"
-        onclick="startScanner('barriere')">
-        📷 Scanner
-      </button>
+      <div class="scan-choice">
+
+        <button
+          type="button"
+          class="scan-button"
+          onclick="startScanner('barriere', 'qr')">
+          📷 QR précis
+        </button>
+
+        <button
+          type="button"
+          class="scan-button barcode-button"
+          onclick="startScanner('barriere', 'barcode')">
+          📷 Code-barres
+        </button>
+
+      </div>
 
     </div>
 
@@ -440,15 +512,26 @@
       <div id="reader-barriere" class="reader"></div>
 
       <div class="scan-hint">
-        Gardez tout le code-barres visible dans la zone.
+        QR : remplissez le carré sans couper les quatre coins. Code-barres : gardez toute la largeur visible.
       </div>
 
-      <button
-        type="button"
-        class="stop-button"
-        onclick="stopScanner('barriere')">
-        Fermer la caméra
-      </button>
+      <div class="scanner-tools">
+
+        <button
+          type="button"
+          class="zoom-button"
+          onclick="zoomCamera(1.5)">
+          🔎 Zoom caméra ×1,5
+        </button>
+
+        <button
+          type="button"
+          class="stop-button"
+          onclick="stopScanner('barriere')">
+          Fermer la caméra
+        </button>
+
+      </div>
 
     </div>
 
@@ -469,12 +552,23 @@
         type="text"
         placeholder="Code du matelas">
 
-      <button
-        type="button"
-        class="scan-button"
-        onclick="startScanner('matelas')">
-        📷 Scanner
-      </button>
+      <div class="scan-choice">
+
+        <button
+          type="button"
+          class="scan-button"
+          onclick="startScanner('matelas', 'qr')">
+          📷 QR précis
+        </button>
+
+        <button
+          type="button"
+          class="scan-button barcode-button"
+          onclick="startScanner('matelas', 'barcode')">
+          📷 Code-barres
+        </button>
+
+      </div>
 
     </div>
 
@@ -506,15 +600,26 @@
       <div id="reader-matelas" class="reader"></div>
 
       <div class="scan-hint">
-        Gardez tout le code-barres visible dans la zone.
+        QR : remplissez le carré sans couper les quatre coins. Code-barres : gardez toute la largeur visible.
       </div>
 
-      <button
-        type="button"
-        class="stop-button"
-        onclick="stopScanner('matelas')">
-        Fermer la caméra
-      </button>
+      <div class="scanner-tools">
+
+        <button
+          type="button"
+          class="zoom-button"
+          onclick="zoomCamera(1.5)">
+          🔎 Zoom caméra ×1,5
+        </button>
+
+        <button
+          type="button"
+          class="stop-button"
+          onclick="stopScanner('matelas')">
+          Fermer la caméra
+        </button>
+
+      </div>
 
     </div>
 
@@ -598,7 +703,7 @@ function showMessage(text, type) {
    DEMARRER LE SCANNER CAMERA
    ========================================================== */
 
-async function startScanner(field) {
+async function startScanner(field, mode = 'qr') {
 
   if (activeScanner) {
     await stopScanner(activeField);
@@ -639,22 +744,69 @@ async function startScanner(field) {
    * C'est important pour les Code 128 longs comme celui
    * montré sur la photo.
    */
+  /*
+   * Deux modes séparés pour éviter de demander au moteur de chercher
+   * simultanément un QR carré et un long Code 128. Cela améliore la
+   * précision et réduit les fausses détections.
+   */
+  const isQrMode = mode === 'qr';
+
+  const title = scannerContainer.querySelector('.scanner-title');
+  if (title) {
+    title.textContent = isQrMode
+      ? 'Scanner le QR Code — mode précis'
+      : 'Scanner le code-barres — mode précis';
+  }
+
+  const formats = isQrMode
+    ? [Html5QrcodeSupportedFormats.QR_CODE]
+    : [
+        Html5QrcodeSupportedFormats.CODE_128,
+        Html5QrcodeSupportedFormats.EAN_13
+      ];
+
   const config = {
 
-    fps: 15,
+    // 10 fps est un bon compromis sur mobile ; la précision vient
+    // surtout du format ciblé et de la zone de lecture.
+    fps: 10,
 
-    formatsToSupport: SUPPORTED_FORMATS,
+    formatsToSupport: formats,
+
+    useBarCodeDetectorIfSupported: false,
+
+    aspectRatio: 16 / 9,
 
     qrbox: function(width, height) {
 
+      if (isQrMode) {
+        // QR : zone presque carrée, centrée et suffisamment grande.
+        const size = Math.min(
+          Math.floor(width * 0.72),
+          Math.floor(height * 0.72),
+          520
+        );
+
+        return {
+          width: size,
+          height: size
+        };
+      }
+
+      // Code-barres : zone très large et peu haute, idéale pour
+      // les longs Code 128 / EAN-13.
       return {
-        width: Math.min(Math.floor(width * 0.94), 700),
-        height: Math.min(Math.floor(height * 0.48), 260)
+        width: Math.min(Math.floor(width * 0.94), 760),
+        height: Math.min(Math.floor(height * 0.34), 180)
       };
 
     }
 
   };
+
+  // On demande deux lectures identiques avant de valider le résultat.
+  let lastDecodedText = null;
+  let lastDecodedAt = 0;
 
 
   activeScanner.start(
@@ -667,12 +819,26 @@ async function startScanner(field) {
         return;
       }
 
+      const cleanText = decodedText.trim();
+      const now = Date.now();
+
       /*
-       * Le résultat est accepté quel que soit le format parmi
-       * EAN-13 / CODE 128 / QR_CODE.
+       * Anti-fausse-détection : le même résultat doit être vu deux fois
+       * à moins de 1,2 seconde d'intervalle. Cela rend la lecture plus
+       * fiable, notamment avec les reflets ou les étiquettes brillantes.
+       */
+      if (cleanText !== lastDecodedText || now - lastDecodedAt > 900) {
+        lastDecodedText = cleanText;
+        lastDecodedAt = now;
+        return;
+      }
+
+      /*
+       * Le résultat est accepté uniquement dans le mode choisi :
+       * QR_CODE ou CODE_128 / EAN_13.
        */
       document.getElementById(field).value =
-        decodedText.trim();
+        cleanText;
 
       let formatName = "";
 
@@ -692,7 +858,7 @@ async function startScanner(field) {
       showMessage(
         "Code enregistré" +
         (formatName ? " (" + formatName + ")" : "") +
-        " : " + decodedText,
+        " : " + cleanText,
         "success"
       );
 
@@ -728,6 +894,56 @@ async function startScanner(field) {
     activeField = null;
 
   });
+
+}
+
+
+/* ==========================================================
+   ZOOM CAMERA POUR QR CODE
+   ========================================================== */
+
+async function zoomCamera(factor) {
+
+  if (!activeScanner) {
+    return;
+  }
+
+  try {
+
+    const capabilities =
+      activeScanner.getRunningTrackCameraCapabilities();
+
+    if (!capabilities || !capabilities.zoomFeature) {
+      showMessage(
+        "Le zoom caméra n'est pas disponible sur cet appareil. Approchez légèrement le téléphone du QR code.",
+        "info"
+      );
+      return;
+    }
+
+    const zoom = capabilities.zoomFeature;
+    const current = zoom.value || zoom.min || 1;
+    const target = Math.min(
+      zoom.max,
+      Math.max(zoom.min, current * factor)
+    );
+
+    await activeScanner.applyVideoConstraints({
+      advanced: [{ zoom: target }]
+    });
+
+    showMessage(
+      "Zoom caméra réglé à ×" + target.toFixed(1) + " pour faciliter la lecture du QR code.",
+      "info"
+    );
+
+  } catch (error) {
+    console.warn("Zoom caméra non disponible :", error);
+    showMessage(
+      "Le zoom automatique n'est pas disponible sur ce téléphone.",
+      "info"
+    );
+  }
 
 }
 
