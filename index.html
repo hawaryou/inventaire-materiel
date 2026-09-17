@@ -598,10 +598,10 @@ function showMessage(text, type) {
    DEMARRER LE SCANNER CAMERA
    ========================================================== */
 
-function startScanner(field) {
+async function startScanner(field) {
 
   if (activeScanner) {
-    stopScanner(activeField);
+    await stopScanner(activeField);
   }
 
   activeField = field;
@@ -610,6 +610,20 @@ function startScanner(field) {
     document.getElementById("scanner-" + field);
 
   scannerContainer.style.display = "block";
+
+  if (
+    location.protocol !== "https:" &&
+    location.hostname !== "localhost" &&
+    location.hostname !== "127.0.0.1"
+  ) {
+    showMessage(
+      "La caméra nécessite une page HTTPS. Ouvrez le lien GitHub Pages en https://.",
+      "error"
+    );
+    scannerContainer.style.display = "none";
+    activeField = null;
+    return;
+  }
 
   const readerId = "reader-" + field;
 
@@ -629,8 +643,6 @@ function startScanner(field) {
 
     fps: 15,
 
-    disableFlip: true,
-
     formatsToSupport: SUPPORTED_FORMATS,
 
     qrbox: function(width, height) {
@@ -646,13 +658,7 @@ function startScanner(field) {
 
 
   activeScanner.start(
-
-    {
-      facingMode: {
-        ideal: "environment"
-      }
-    },
-
+    { facingMode: "environment" },
     config,
 
     function(decodedText, decodedResult) {
@@ -705,8 +711,14 @@ function startScanner(field) {
 
     console.error(error);
 
+    let detail = "";
+
+    if (error && error.message) {
+      detail = " (" + error.message + ")";
+    }
+
     showMessage(
-      "Impossible d'utiliser la caméra. Vérifiez l'autorisation caméra et utilisez le site en HTTPS.",
+      "Impossible d'utiliser la caméra. Vérifiez l'autorisation caméra, que le site est en HTTPS et que le navigateur a accès à la caméra." + detail,
       "error"
     );
 
@@ -729,31 +741,21 @@ function stopScanner(field) {
   const scannerContainer =
     document.getElementById("scanner-" + field);
 
-  if (!activeScanner) {
-
-    scannerContainer.style.display = "none";
-
-    return;
-  }
-
   const scannerToStop = activeScanner;
 
   activeScanner = null;
   activeField = null;
 
-  scannerToStop.stop()
+  if (!scannerToStop) {
+    scannerContainer.style.display = "none";
+    return Promise.resolve();
+  }
 
-    .then(function() {
-
-      scannerToStop.clear();
-
-      scannerContainer.style.display = "none";
-
-    })
-
+  return scannerToStop.stop()
     .catch(function(error) {
-
-      console.error(error);
+      console.warn("Arrêt caméra :", error);
+    })
+    .then(function() {
 
       try {
         scannerToStop.clear();
