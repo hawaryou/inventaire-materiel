@@ -2,20 +2,14 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-
-  <meta name="viewport"
-        content="width=device-width, initial-scale=1.0">
-
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Inventaire du matériel</title>
 
-  <!-- Bibliothèque de lecture des codes-barres -->
+  <!-- Lecteur EAN-13 / CODE 128 / QR -->
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
   <style>
-
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
 
     body {
       margin: 0;
@@ -32,7 +26,14 @@
 
     h1 {
       text-align: center;
-      margin: 10px 0 25px;
+      margin: 10px 0 10px;
+    }
+
+    .subtitle {
+      text-align: center;
+      color: #666;
+      font-size: 14px;
+      margin: 0 0 20px;
     }
 
     .card {
@@ -53,7 +54,7 @@
       color: #d93025;
     }
 
-    input {
+    input[type="text"] {
       width: 100%;
       padding: 13px;
       border: 1px solid #bbb;
@@ -80,6 +81,10 @@
       cursor: pointer;
     }
 
+    button:active {
+      transform: scale(0.98);
+    }
+
     .scan-button {
       background: #4f46e5;
       color: white;
@@ -102,12 +107,21 @@
       color: white;
     }
 
+    .photo-button {
+      display: block;
+      width: 100%;
+      margin-top: 8px;
+      background: #5f6368;
+      color: white;
+    }
+
     .scanner {
       display: none;
       margin-top: 12px;
       padding: 10px;
       background: #000;
       border-radius: 10px;
+      overflow: hidden;
     }
 
     .scanner-title {
@@ -117,10 +131,33 @@
       margin-bottom: 10px;
     }
 
+    .scan-hint {
+      color: #ddd;
+      text-align: center;
+      font-size: 13px;
+      margin: 8px 4px 2px;
+      line-height: 1.4;
+    }
+
+    .reader {
+      width: 100%;
+    }
+
     .help {
       color: #666;
       font-size: 13px;
-      margin-top: 5px;
+      margin-top: 7px;
+      line-height: 1.4;
+    }
+
+    .formats {
+      background: #eef3ff;
+      color: #234;
+      border-radius: 8px;
+      padding: 10px;
+      font-size: 13px;
+      margin-bottom: 15px;
+      text-align: center;
     }
 
     .message {
@@ -130,6 +167,7 @@
       margin-bottom: 15px;
       text-align: center;
       font-weight: bold;
+      line-height: 1.4;
     }
 
     .success {
@@ -150,8 +188,11 @@
       color: #174ea6;
     }
 
-    @media (max-width: 500px) {
+    .hidden-file {
+      display: none;
+    }
 
+    @media (max-width: 500px) {
       .scan-row {
         flex-direction: column;
       }
@@ -159,11 +200,8 @@
       .scan-button {
         width: 100%;
       }
-
     }
-
   </style>
-
 </head>
 
 <body>
@@ -172,13 +210,18 @@
 
   <h1>Inventaire du matériel</h1>
 
+  <div class="subtitle">
+    Scanner EAN-13 • Code 128 • QR Code
+  </div>
+
   <div id="message" class="message"></div>
 
+  <div class="formats">
+    📷 Le scanner reconnaît <strong>EAN-13</strong>, <strong>Code 128</strong> et
+    <strong>QR Code</strong>.
+  </div>
 
-  <!-- ============================= -->
   <!-- INFORMATIONS GENERALES -->
-  <!-- ============================= -->
-
   <div class="card">
 
     <label for="foyer">
@@ -191,7 +234,6 @@
       placeholder="Nom du foyer"
       autocomplete="organization">
 
-
     <label for="nom">
       Nom <span class="required">*</span>
     </label>
@@ -201,7 +243,6 @@
       type="text"
       placeholder="Nom"
       autocomplete="name">
-
 
     <label for="chambre">
       Chambre <span class="required">*</span>
@@ -215,10 +256,7 @@
   </div>
 
 
-  <!-- ============================= -->
   <!-- LIT -->
-  <!-- ============================= -->
-
   <div class="card">
 
     <label for="lit">
@@ -230,40 +268,54 @@
       <input
         id="lit"
         type="text"
-        inputmode="numeric"
-        maxlength="13"
-        placeholder="EAN-13 du lit">
+        placeholder="Code du lit">
 
       <button
+        type="button"
         class="scan-button"
         onclick="startScanner('lit')">
-
         📷 Scanner
-
       </button>
 
     </div>
 
+    <button
+      type="button"
+      class="photo-button"
+      onclick="choosePhoto('lit')">
+      🖼️ Lire une photo du code
+    </button>
+
+    <input
+      id="file-lit"
+      class="hidden-file"
+      type="file"
+      accept="image/*"
+      capture="environment"
+      onchange="scanPhoto('lit', this)">
+
     <div class="help">
-      Obligatoire
+      Obligatoire. EAN-13, Code 128 ou QR Code.
     </div>
 
-    <div
-      id="scanner-lit"
-      class="scanner">
+    <div id="scanner-lit" class="scanner">
 
       <div class="scanner-title">
-        Scanner le code-barres du LIT
+        Scanner le code du LIT
       </div>
 
-      <div id="reader-lit"></div>
+      <div id="reader-lit" class="reader"></div>
+
+      <div class="scan-hint">
+        Pour un Code 128 long : éloignez légèrement le téléphone,
+        gardez le code horizontal et évitez les reflets.
+      </div>
 
       <button
+        type="button"
         class="stop-button"
         onclick="stopScanner('lit')">
-
         Fermer la caméra
-
       </button>
 
     </div>
@@ -271,10 +323,7 @@
   </div>
 
 
-  <!-- ============================= -->
   <!-- POTENCE -->
-  <!-- ============================= -->
-
   <div class="card">
 
     <label for="potence">
@@ -286,40 +335,53 @@
       <input
         id="potence"
         type="text"
-        inputmode="numeric"
-        maxlength="13"
-        placeholder="EAN-13 de la potence">
+        placeholder="Code de la potence">
 
       <button
+        type="button"
         class="scan-button"
         onclick="startScanner('potence')">
-
         📷 Scanner
-
       </button>
 
     </div>
 
+    <button
+      type="button"
+      class="photo-button"
+      onclick="choosePhoto('potence')">
+      🖼️ Lire une photo du code
+    </button>
+
+    <input
+      id="file-potence"
+      class="hidden-file"
+      type="file"
+      accept="image/*"
+      capture="environment"
+      onchange="scanPhoto('potence', this)">
+
     <div class="help">
-      Facultatif
+      Facultatif. EAN-13, Code 128 ou QR Code.
     </div>
 
-    <div
-      id="scanner-potence"
-      class="scanner">
+    <div id="scanner-potence" class="scanner">
 
       <div class="scanner-title">
-        Scanner le code-barres de la POTENCE
+        Scanner le code de la POTENCE
       </div>
 
-      <div id="reader-potence"></div>
+      <div id="reader-potence" class="reader"></div>
+
+      <div class="scan-hint">
+        Gardez tout le code-barres visible dans la zone.
+      </div>
 
       <button
+        type="button"
         class="stop-button"
         onclick="stopScanner('potence')">
-
         Fermer la caméra
-
       </button>
 
     </div>
@@ -327,10 +389,7 @@
   </div>
 
 
-  <!-- ============================= -->
   <!-- BARRIERE -->
-  <!-- ============================= -->
-
   <div class="card">
 
     <label for="barriere">
@@ -342,40 +401,53 @@
       <input
         id="barriere"
         type="text"
-        inputmode="numeric"
-        maxlength="13"
-        placeholder="EAN-13 de la barrière">
+        placeholder="Code de la barrière">
 
       <button
+        type="button"
         class="scan-button"
         onclick="startScanner('barriere')">
-
         📷 Scanner
-
       </button>
 
     </div>
 
+    <button
+      type="button"
+      class="photo-button"
+      onclick="choosePhoto('barriere')">
+      🖼️ Lire une photo du code
+    </button>
+
+    <input
+      id="file-barriere"
+      class="hidden-file"
+      type="file"
+      accept="image/*"
+      capture="environment"
+      onchange="scanPhoto('barriere', this)">
+
     <div class="help">
-      Facultatif
+      Facultatif. EAN-13, Code 128 ou QR Code.
     </div>
 
-    <div
-      id="scanner-barriere"
-      class="scanner">
+    <div id="scanner-barriere" class="scanner">
 
       <div class="scanner-title">
-        Scanner le code-barres de la BARRIÈRE
+        Scanner le code de la BARRIÈRE
       </div>
 
-      <div id="reader-barriere"></div>
+      <div id="reader-barriere" class="reader"></div>
+
+      <div class="scan-hint">
+        Gardez tout le code-barres visible dans la zone.
+      </div>
 
       <button
+        type="button"
         class="stop-button"
         onclick="stopScanner('barriere')">
-
         Fermer la caméra
-
       </button>
 
     </div>
@@ -383,10 +455,7 @@
   </div>
 
 
-  <!-- ============================= -->
   <!-- MATELAS -->
-  <!-- ============================= -->
-
   <div class="card">
 
     <label for="matelas">
@@ -398,40 +467,53 @@
       <input
         id="matelas"
         type="text"
-        inputmode="numeric"
-        maxlength="13"
-        placeholder="EAN-13 du matelas">
+        placeholder="Code du matelas">
 
       <button
+        type="button"
         class="scan-button"
         onclick="startScanner('matelas')">
-
         📷 Scanner
-
       </button>
 
     </div>
 
+    <button
+      type="button"
+      class="photo-button"
+      onclick="choosePhoto('matelas')">
+      🖼️ Lire une photo du code
+    </button>
+
+    <input
+      id="file-matelas"
+      class="hidden-file"
+      type="file"
+      accept="image/*"
+      capture="environment"
+      onchange="scanPhoto('matelas', this)">
+
     <div class="help">
-      Facultatif
+      Facultatif. EAN-13, Code 128 ou QR Code.
     </div>
 
-    <div
-      id="scanner-matelas"
-      class="scanner">
+    <div id="scanner-matelas" class="scanner">
 
       <div class="scanner-title">
-        Scanner le code-barres du MATELAS À AIR
+        Scanner le code du MATELAS À AIR
       </div>
 
-      <div id="reader-matelas"></div>
+      <div id="reader-matelas" class="reader"></div>
+
+      <div class="scan-hint">
+        Gardez tout le code-barres visible dans la zone.
+      </div>
 
       <button
+        type="button"
         class="stop-button"
         onclick="stopScanner('matelas')">
-
         Fermer la caméra
-
       </button>
 
     </div>
@@ -439,18 +521,14 @@
   </div>
 
 
-  <!-- ============================= -->
   <!-- BOUTON FINAL -->
-  <!-- ============================= -->
-
   <div class="card">
 
     <button
+      type="button"
       class="continue-button"
       onclick="openGoogleForm()">
-
       Continuer vers le formulaire
-
     </button>
 
   </div>
@@ -459,7 +537,6 @@
 
 
 <script>
-
 
 /* ==========================================================
    GOOGLE FORM
@@ -474,29 +551,25 @@ const GOOGLE_FORM_URL =
    ========================================================== */
 
 const ENTRY = {
-
-  foyer:
-    "entry.358264119",
-
-  nom:
-    "entry.1190830405",
-
-  chambre:
-    "entry.1451593184",
-
-  lit:
-    "entry.2011644043",
-
-  potence:
-    "entry.904645354",
-
-  barriere:
-    "entry.426464072",
-
-  matelas:
-    "entry.1812177639"
-
+  foyer: "entry.358264119",
+  nom: "entry.1190830405",
+  chambre: "entry.1451593184",
+  lit: "entry.2011644043",
+  potence: "entry.904645354",
+  barriere: "entry.426464072",
+  matelas: "entry.1812177639"
 };
+
+
+/* ==========================================================
+   FORMATS AUTORISÉS
+   ========================================================== */
+
+const SUPPORTED_FORMATS = [
+  Html5QrcodeSupportedFormats.QR_CODE,
+  Html5QrcodeSupportedFormats.CODE_128,
+  Html5QrcodeSupportedFormats.EAN_13
+];
 
 
 /* ==========================================================
@@ -504,7 +577,6 @@ const ENTRY = {
    ========================================================== */
 
 let activeScanner = null;
-
 let activeField = null;
 
 
@@ -514,77 +586,61 @@ let activeField = null;
 
 function showMessage(text, type) {
 
-  const element =
-    document.getElementById("message");
+  const element = document.getElementById("message");
 
   element.textContent = text;
-
-  element.className =
-    "message " + type;
+  element.className = "message " + type;
 
 }
 
 
 /* ==========================================================
-   FORMATS ACCEPTÉS
-   ========================================================== */
-
-const formatsToSupport = [
-  Html5QrcodeSupportedFormats.EAN_13,
-  Html5QrcodeSupportedFormats.CODE_128,
-  Html5QrcodeSupportedFormats.QR_CODE
-];
-
-
-/* ==========================================================
-   DEMARRER LE SCANNER
+   DEMARRER LE SCANNER CAMERA
    ========================================================== */
 
 function startScanner(field) {
 
   if (activeScanner) {
-
     stopScanner(activeField);
-
   }
 
   activeField = field;
 
-
   const scannerContainer =
-    document.getElementById(
-      "scanner-" + field
-    );
+    document.getElementById("scanner-" + field);
 
-  scannerContainer.style.display =
-    "block";
+  scannerContainer.style.display = "block";
 
+  const readerId = "reader-" + field;
 
-  const readerId =
-    "reader-" + field;
+  // Nettoyage préventif
+  const reader = document.getElementById(readerId);
+  reader.innerHTML = "";
 
+  activeScanner = new Html5Qrcode(readerId);
 
-  activeScanner =
-    new Html5Qrcode(readerId);
-
-
+  /*
+   * Zone volontairement large et horizontale.
+   *
+   * C'est important pour les Code 128 longs comme celui
+   * montré sur la photo.
+   */
   const config = {
 
-    fps: 10,
+    fps: 15,
+
+    disableFlip: true,
+
+    formatsToSupport: SUPPORTED_FORMATS,
 
     qrbox: function(width, height) {
 
       return {
-
-        width: Math.min(width * 0.90, 500),
-
-        height: Math.min(height * 0.35, 180)
-
+        width: Math.min(Math.floor(width * 0.94), 700),
+        height: Math.min(Math.floor(height * 0.48), 260)
       };
 
-    },
-
-    formatsToSupport: formatsToSupport
+    }
 
   };
 
@@ -592,38 +648,57 @@ function startScanner(field) {
   activeScanner.start(
 
     {
-      facingMode: "environment"
+      facingMode: {
+        ideal: "environment"
+      }
     },
 
     config,
 
-    function(decodedText) {
+    function(decodedText, decodedResult) {
 
-      /* Inscription dans le champ */
+      if (!decodedText) {
+        return;
+      }
 
+      /*
+       * Le résultat est accepté quel que soit le format parmi
+       * EAN-13 / CODE 128 / QR_CODE.
+       */
       document.getElementById(field).value =
-        decodedText;
+        decodedText.trim();
 
+      let formatName = "";
+
+      try {
+        if (
+          decodedResult &&
+          decodedResult.result &&
+          decodedResult.result.format
+        ) {
+          formatName =
+            decodedResult.result.format.formatName || "";
+        }
+      } catch (e) {
+        formatName = "";
+      }
 
       showMessage(
-        "Code enregistré : " + decodedText,
+        "Code enregistré" +
+        (formatName ? " (" + formatName + ")" : "") +
+        " : " + decodedText,
         "success"
       );
-
 
       stopScanner(field);
 
     },
 
     function(errorMessage) {
-
       /*
-       * Les erreurs de lecture sont normales
-       * lorsque la caméra cherche le code.
-       *
-       * On ne les affiche donc pas.
+       * Les erreurs de recherche sont normales pendant
+       * que la caméra analyse les images.
        */
-
     }
 
   ).catch(function(error) {
@@ -631,15 +706,13 @@ function startScanner(field) {
     console.error(error);
 
     showMessage(
-      "Impossible d'utiliser la caméra. Vérifiez l'autorisation caméra du navigateur.",
+      "Impossible d'utiliser la caméra. Vérifiez l'autorisation caméra et utilisez le site en HTTPS.",
       "error"
     );
 
-    scannerContainer.style.display =
-      "none";
+    scannerContainer.style.display = "none";
 
     activeScanner = null;
-
     activeField = null;
 
   });
@@ -654,33 +727,27 @@ function startScanner(field) {
 function stopScanner(field) {
 
   const scannerContainer =
-    document.getElementById(
-      "scanner-" + field
-    );
-
+    document.getElementById("scanner-" + field);
 
   if (!activeScanner) {
 
-    scannerContainer.style.display =
-      "none";
+    scannerContainer.style.display = "none";
 
     return;
-
   }
 
+  const scannerToStop = activeScanner;
 
-  activeScanner.stop()
+  activeScanner = null;
+  activeField = null;
+
+  scannerToStop.stop()
 
     .then(function() {
 
-      activeScanner.clear();
+      scannerToStop.clear();
 
-      activeScanner = null;
-
-      activeField = null;
-
-      scannerContainer.style.display =
-        "none";
+      scannerContainer.style.display = "none";
 
     })
 
@@ -688,14 +755,78 @@ function stopScanner(field) {
 
       console.error(error);
 
-      activeScanner = null;
+      try {
+        scannerToStop.clear();
+      } catch (e) {}
 
-      activeField = null;
-
-      scannerContainer.style.display =
-        "none";
+      scannerContainer.style.display = "none";
 
     });
+
+}
+
+
+/* ==========================================================
+   LECTURE D'UNE PHOTO
+   ========================================================== */
+
+function choosePhoto(field) {
+
+  document.getElementById("file-" + field).click();
+
+}
+
+
+async function scanPhoto(field, input) {
+
+  if (!input.files || !input.files[0]) {
+    return;
+  }
+
+  const file = input.files[0];
+
+  showMessage(
+    "Analyse de la photo en cours…",
+    "info"
+  );
+
+  let scanner = null;
+
+  try {
+
+    scanner = new Html5Qrcode("reader-" + field);
+
+    const decodedText =
+      await scanner.scanFile(file, true);
+
+    document.getElementById(field).value =
+      decodedText.trim();
+
+    showMessage(
+      "Code trouvé sur la photo : " + decodedText,
+      "success"
+    );
+
+  } catch (error) {
+
+    console.error(error);
+
+    showMessage(
+      "Le code n'a pas été trouvé sur la photo. Essayez une photo plus nette, bien cadrée et sans reflet.",
+      "error"
+    );
+
+  } finally {
+
+    if (scanner) {
+      try {
+        await scanner.clear();
+      } catch (e) {}
+    }
+
+    input.value = "";
+
+  }
 
 }
 
@@ -706,49 +837,29 @@ function stopScanner(field) {
 
 function openGoogleForm() {
 
-
-  /* -----------------------------------------
-     Récupération des champs
-     ----------------------------------------- */
-
   const foyer =
-    document.getElementById("foyer")
-      .value.trim();
-
+    document.getElementById("foyer").value.trim();
 
   const nom =
-    document.getElementById("nom")
-      .value.trim();
-
+    document.getElementById("nom").value.trim();
 
   const chambre =
-    document.getElementById("chambre")
-      .value.trim();
-
+    document.getElementById("chambre").value.trim();
 
   const lit =
-    document.getElementById("lit")
-      .value.trim();
-
+    document.getElementById("lit").value.trim();
 
   const potence =
-    document.getElementById("potence")
-      .value.trim();
-
+    document.getElementById("potence").value.trim();
 
   const barriere =
-    document.getElementById("barriere")
-      .value.trim();
-
+    document.getElementById("barriere").value.trim();
 
   const matelas =
-    document.getElementById("matelas")
-      .value.trim();
+    document.getElementById("matelas").value.trim();
 
 
-  /* -----------------------------------------
-     Vérification des champs obligatoires
-     ----------------------------------------- */
+  /* Champs obligatoires */
 
   if (!foyer) {
 
@@ -758,7 +869,6 @@ function openGoogleForm() {
     );
 
     return;
-
   }
 
 
@@ -770,7 +880,6 @@ function openGoogleForm() {
     );
 
     return;
-
   }
 
 
@@ -782,7 +891,6 @@ function openGoogleForm() {
     );
 
     return;
-
   }
 
 
@@ -794,13 +902,10 @@ function openGoogleForm() {
     );
 
     return;
-
   }
 
 
-  /* -----------------------------------------
-     Création de l'URL Google Forms
-     ----------------------------------------- */
+  /* Création de l'URL Google Forms */
 
   let url =
     GOOGLE_FORM_URL +
@@ -873,17 +978,6 @@ function openGoogleForm() {
 
   if (matelas) {
 
-    if (!isValidEAN13(matelas)) {
-
-      showMessage(
-        "Le code du matelas n'est pas un EAN-13 valide.",
-        "error"
-      );
-
-      return;
-
-    }
-
     url +=
       "&" +
       ENTRY.matelas +
@@ -893,14 +987,11 @@ function openGoogleForm() {
   }
 
 
-  /* -----------------------------------------
-     Ouverture du Google Form
-     ----------------------------------------- */
+  /* Ouverture du Google Form */
 
   window.location.href = url;
 
 }
-
 
 </script>
 
