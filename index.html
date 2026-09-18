@@ -764,7 +764,7 @@ async function startScanner(field, mode = 'qr') {
   if (title) {
     title.textContent = isQrMode
       ? 'Scanner le QR Code — mode précis'
-      : 'Scanner le CODE 128 — moteur renforcé iPhone';
+      : 'Scanner le code-barres — mode renforcé iPhone';
   }
 
   if (!isQrMode) {
@@ -830,7 +830,7 @@ async function startScanner(field, mode = 'qr') {
       }
 
       const detector = new window.BarcodeDetectorPolyfill({
-        formats: ['code_128']
+        formats: ['code_128', 'ean_13']
       });
 
       let lastText = '';
@@ -848,32 +848,32 @@ async function startScanner(field, mode = 'qr') {
       const scanCanvas = document.createElement('canvas');
       const scanCtx = scanCanvas.getContext('2d', { willReadFrequently: true });
 
-      function getScanRegion() {
+      function getScanRegions() {
         const vw = preview.videoWidth;
         const vh = preview.videoHeight;
-        // Largeur presque complète, hauteur centrée : adaptée au long Code 128.
-        const cropW = Math.round(vw * 0.94);
-        const cropH = Math.round(vh * 0.30);
-        const sx = Math.round((vw - cropW) / 2);
-        const sy = Math.round((vh - cropH) / 2);
-        return { sx, sy, cropW, cropH };
+        const cropW = Math.round(vw * 0.96);
+        const cropH = Math.round(vh * 0.28);
+        const maxY = Math.max(0, vh - cropH);
+        // Le code peut être légèrement au-dessus/au-dessous de la mire :
+        // on essaie 5 bandes sans réduire la largeur utile.
+        const centers = [0.32, 0.42, 0.50, 0.58, 0.68];
+        return centers.map(c => ({
+          sx: Math.round((vw - cropW) / 2),
+          sy: Math.round(Math.min(maxY, Math.max(0, vh * c - cropH / 2))),
+          cropW, cropH
+        }));
       }
 
-      function prepareScanCanvas() {
-        const r = getScanRegion();
+      function prepareScanCanvas(r) {
         if (scanCanvas.width !== r.cropW || scanCanvas.height !== r.cropH) {
           scanCanvas.width = r.cropW;
           scanCanvas.height = r.cropH;
         }
-        scanCtx.drawImage(
-          preview,
-          r.sx, r.sy, r.cropW, r.cropH,
-          0, 0, r.cropW, r.cropH
-        );
-        return r;
+        scanCtx.clearRect(0, 0, r.cropW, r.cropH);
+        scanCtx.drawImage(preview, r.sx, r.sy, r.cropW, r.cropH, 0, 0, r.cropW, r.cropH);
       }
 
-      function accept(text) {
+      function accept(text, format) {
         if (!text || finished) return false;
         text = String(text).trim();
         if (!text) return false;
@@ -892,7 +892,7 @@ async function startScanner(field, mode = 'qr') {
 
         finished = true;
         document.getElementById(field).value = text;
-        showMessage('Code-barres détecté : ' + text, 'success');
+        showMessage('Code-barres détecté : ' + text + ' (' + format.toUpperCase().replace('_', '-') + ')', 'success');
         stopScanner(field);
         return true;
       }
@@ -901,14 +901,21 @@ async function startScanner(field, mode = 'qr') {
         if (!running || finished || detecting || !preview.videoWidth) return;
         detecting = true;
         try {
-          // ZBar travaille directement sur le canvas recadré.
-          // Le recadrage est fait à la résolution native de la caméra :
-          // aucune perte de détail des fines barres du Code 128.
-          prepareScanCanvas();
-          const barcodes = await detector.detect(scanCanvas);
-          if (barcodes && barcodes.length) {
-            for (const barcode of barcodes) {
-              if (barcode.format === 'code_128' && accept(barcode.rawValue)) break;
+          // On teste plusieurs bandes horizontales : sur l'étiquette réelle,
+          // le code n'est pas toujours parfaitement centré dans la mire.
+          const regions = getScanRegions();
+          for (const region of regions) {
+            prepareScanCanvas(region);
+            const barcodes = await detector.detect(scanCanvas);
+            if (barcodes && barcodes.length) {
+              let found = false;
+              for (const barcode of barcodes) {
+                if ((barcode.format === 'code_128' || barcode.format === 'ean_13') && accept(barcode.rawValue, barcode.format)) {
+                  found = true;
+                  break;
+                }
+              }
+              if (found) break;
             }
           }
         } catch (e) {
