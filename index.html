@@ -443,6 +443,7 @@
         width: 100%;
       }
     }
+  
 
     /* ======================================================
        SIGNATURE ELECTRONIQUE
@@ -454,100 +455,35 @@
       border-radius: 12px;
       box-shadow: 0 2px 8px rgba(0,0,0,0.08);
     }
-
-    .signature-title {
-      margin: 0 0 6px;
-      font-size: 18px;
-    }
-
-    .signature-help {
-      color: #666;
-      font-size: 13px;
-      line-height: 1.45;
-      margin: 0 0 12px;
-    }
-
+    .signature-title { margin: 0 0 6px; font-size: 18px; }
+    .signature-help { color:#666; font-size:13px; line-height:1.45; margin:0 0 12px; }
     .signature-pad-wrap {
-      position: relative;
-      width: 100%;
-      height: 190px;
-      border: 2px dashed #b8c2cc;
-      border-radius: 10px;
-      background: #fff;
-      overflow: hidden;
-      touch-action: none;
+      position:relative; width:100%; height:190px; border:2px dashed #b8c2cc;
+      border-radius:10px; background:#fff; overflow:hidden; touch-action:none;
     }
-
     #signaturePad {
-      position: absolute;
-      inset: 0;
-      display: block;
-      width: 100%;
-      height: 100%;
-      touch-action: none;
-      cursor: crosshair;
-      z-index: 2;
-      background: transparent;
+      position:absolute; inset:0; display:block; width:100%; height:100%;
+      z-index:20; touch-action:none !important; cursor:crosshair;
+      background:transparent; -webkit-user-select:none; user-select:none;
+      -webkit-touch-callout:none;
     }
-
-    #signaturePath {
-      pointer-events: none;
-    }
-
     .signature-placeholder {
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      transform: translate(-50%, -50%);
-      color: #a0a8b0;
-      font-size: 14px;
-      pointer-events: none;
-      text-align: center;
-      white-space: nowrap;
+      position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+      color:#a0a8b0; font-size:14px; pointer-events:none; text-align:center;
+      white-space:nowrap; z-index:5;
     }
-
     .signature-line {
-      position: absolute;
-      left: 8%;
-      right: 8%;
-      bottom: 38px;
-      border-bottom: 1px solid #cbd2d9;
-      pointer-events: none;
+      position:absolute; left:8%; right:8%; bottom:38px;
+      border-bottom:1px solid #cbd2d9; pointer-events:none; z-index:5;
     }
-
-    .signature-actions {
-      display: flex;
-      gap: 10px;
-      margin-top: 10px;
+    .signature-actions { display:flex; gap:10px; margin-top:10px; }
+    .signature-clear { flex:1; background:#f3f4f6; color:#333; border:1px solid #d1d5db; }
+    .signature-status { margin-top:9px; font-size:13px; font-weight:600; color:#188038; min-height:18px; }
+    @media (max-width:500px) {
+      .signature-pad-wrap { height:175px; }
+      .signature-placeholder { white-space:normal; width:80%; }
     }
-
-    .signature-clear {
-      flex: 1;
-      background: #f3f4f6;
-      color: #333;
-      border: 1px solid #d1d5db;
-    }
-
-    .signature-status {
-      margin-top: 9px;
-      font-size: 13px;
-      font-weight: 600;
-      color: #188038;
-      min-height: 18px;
-    }
-
-    @media (max-width: 500px) {
-      .signature-pad-wrap {
-        height: 175px;
-      }
-
-      .signature-placeholder {
-        white-space: normal;
-        width: 80%;
-      }
-    }
-
-  </style>
+</style>
 
 <style id="euromed-logo-style">
 .euromed-logo{width:min(92vw,700px);margin:8px auto 18px;text-align:center;display:flex;justify-content:center;align-items:center}
@@ -957,28 +893,17 @@
 
   <!-- SIGNATURE ELECTRONIQUE -->
   <div class="signature-card">
-
     <h2 class="signature-title">Signature électronique <span class="required">*</span></h2>
-
-    <p class="signature-help">
-      Signez directement avec le doigt, un stylet ou la souris dans la zone ci-dessous.
-      La signature est obligatoire avant de poursuivre.
-    </p>
-
+    <p class="signature-help">Signez directement avec le doigt, un stylet ou la souris dans la zone ci-dessous. La signature est obligatoire avant de poursuivre.</p>
     <div class="signature-pad-wrap" id="signaturePadWrap">
-      <svg id="signaturePad" class="signature-svg" viewBox="0 0 1000 400" preserveAspectRatio="none" aria-label="Zone de signature électronique" role="img">
-        <path id="signaturePath" d="" fill="none" stroke="#17202a" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"></path>
-      </svg>
+      <canvas id="signaturePad" aria-label="Zone de signature électronique"></canvas>
       <div class="signature-placeholder" id="signaturePlaceholder">Signez ici avec votre doigt</div>
       <div class="signature-line"></div>
     </div>
-
     <div class="signature-actions">
       <button type="button" class="signature-clear" onclick="clearSignature()">Effacer la signature</button>
     </div>
-
     <div id="signatureStatus" class="signature-status" aria-live="polite"></div>
-
   </div>
 
 
@@ -1766,154 +1691,6 @@ async function scanPhoto(field, input) {
 
 
 /* ==========================================================
-   SIGNATURE ELECTRONIQUE — SVG, tactile + souris
-   ========================================================== */
-
-let signaturePad = null;
-let signaturePath = null;
-let signatureDrawing = false;
-let signatureHasContent = false;
-let signaturePoints = [];
-
-function signaturePointFromEvent(event) {
-  const rect = signaturePad.getBoundingClientRect();
-  const x = Math.max(0, Math.min(1000, ((event.clientX - rect.left) / rect.width) * 1000));
-  const y = Math.max(0, Math.min(400, ((event.clientY - rect.top) / rect.height) * 400));
-  return { x, y };
-}
-
-function renderSignature() {
-  if (!signaturePath || !signaturePoints.length) return;
-
-  if (signaturePoints.length === 1) {
-    const p = signaturePoints[0];
-    signaturePath.setAttribute('d', `M ${p.x} ${p.y} l 0.1 0.1`);
-    return;
-  }
-
-  let d = `M ${signaturePoints[0].x} ${signaturePoints[0].y}`;
-  for (let i = 1; i < signaturePoints.length; i++) {
-    const p = signaturePoints[i];
-    d += ` L ${p.x} ${p.y}`;
-  }
-  signaturePath.setAttribute('d', d);
-}
-
-function startSignature(event) {
-  if (!signaturePad) return;
-  event.preventDefault();
-  event.stopPropagation();
-
-  signatureDrawing = true;
-  signatureHasContent = true;
-  signaturePoints = [signaturePointFromEvent(event)];
-  renderSignature();
-
-  const placeholder = document.getElementById('signaturePlaceholder');
-  const status = document.getElementById('signatureStatus');
-  if (placeholder) placeholder.style.display = 'none';
-  if (status) status.textContent = 'Signature en cours…';
-
-  if (event.pointerId !== undefined && signaturePad.setPointerCapture) {
-    try { signaturePad.setPointerCapture(event.pointerId); } catch (e) {}
-  }
-}
-
-function moveSignature(event) {
-  if (!signatureDrawing || !signaturePad) return;
-  event.preventDefault();
-  event.stopPropagation();
-
-  const p = signaturePointFromEvent(event);
-  const last = signaturePoints[signaturePoints.length - 1];
-  if (!last || Math.hypot(p.x - last.x, p.y - last.y) >= 0.7) {
-    signaturePoints.push(p);
-    renderSignature();
-  }
-}
-
-function endSignature(event) {
-  if (!signatureDrawing) return;
-  event.preventDefault();
-  event.stopPropagation();
-  signatureDrawing = false;
-
-  if (event.pointerId !== undefined && signaturePad && signaturePad.releasePointerCapture) {
-    try { signaturePad.releasePointerCapture(event.pointerId); } catch (e) {}
-  }
-
-  const status = document.getElementById('signatureStatus');
-  if (status) status.textContent = '✓ Signature enregistrée sur cette page.';
-}
-
-function clearSignature() {
-  if (!signaturePath) return;
-  signaturePoints = [];
-  signatureDrawing = false;
-  signatureHasContent = false;
-  signaturePath.setAttribute('d', '');
-
-  const placeholder = document.getElementById('signaturePlaceholder');
-  const status = document.getElementById('signatureStatus');
-  if (placeholder) placeholder.style.display = '';
-  if (status) status.textContent = '';
-}
-
-function initSignaturePad() {
-  signaturePad = document.getElementById('signaturePad');
-  signaturePath = document.getElementById('signaturePath');
-  if (!signaturePad || !signaturePath) return;
-
-  // Empêche le défilement/zoom du navigateur pendant la signature.
-  signaturePad.style.touchAction = 'none';
-  signaturePad.style.webkitUserSelect = 'none';
-  signaturePad.style.userSelect = 'none';
-
-  // Pointer Events : souris, trackpad, stylet, doigt.
-  signaturePad.addEventListener('pointerdown', startSignature, { passive: false });
-  signaturePad.addEventListener('pointermove', moveSignature, { passive: false });
-  signaturePad.addEventListener('pointerup', endSignature, { passive: false });
-  signaturePad.addEventListener('pointercancel', endSignature, { passive: false });
-  signaturePad.addEventListener('pointerleave', function(event) {
-    if (signatureDrawing && event.pointerType === 'mouse') endSignature(event);
-  }, { passive: false });
-
-  // Compatibilité supplémentaire pour les anciens navigateurs tactiles.
-  signaturePad.addEventListener('touchstart', function(e) {
-    if (window.PointerEvent) return;
-    const t = e.changedTouches[0];
-    if (!t) return;
-    startSignature({
-      clientX: t.clientX, clientY: t.clientY,
-      preventDefault: () => e.preventDefault(), stopPropagation: () => e.stopPropagation()
-    });
-  }, { passive: false });
-
-  signaturePad.addEventListener('touchmove', function(e) {
-    if (window.PointerEvent || !signatureDrawing) return;
-    const t = e.changedTouches[0];
-    if (!t) return;
-    moveSignature({
-      clientX: t.clientX, clientY: t.clientY,
-      preventDefault: () => e.preventDefault(), stopPropagation: () => e.stopPropagation()
-    });
-  }, { passive: false });
-
-  signaturePad.addEventListener('touchend', function(e) {
-    if (window.PointerEvent) return;
-    endSignature({
-      preventDefault: () => e.preventDefault(), stopPropagation: () => e.stopPropagation()
-    });
-  }, { passive: false });
-}
-
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initSignaturePad, { once: true });
-} else {
-  initSignaturePad();
-}
-
-/* ==========================================================
    OUVERTURE DU GOOGLE FORM
    ========================================================== */
 
@@ -1942,19 +1719,9 @@ function openGoogleForm() {
 
 
   /* Signature obligatoire */
-
   if (!signatureHasContent) {
-
-    showMessage(
-      "Veuillez signer électroniquement avant de poursuivre.",
-      "error"
-    );
-
-    document.getElementById("signaturePad")?.scrollIntoView({
-      behavior: "smooth",
-      block: "center"
-    });
-
+    showMessage("Veuillez signer électroniquement avant de poursuivre.", "error");
+    document.getElementById("signaturePad")?.scrollIntoView({behavior:"smooth", block:"center"});
     return;
   }
 
@@ -2092,6 +1859,131 @@ function openGoogleForm() {
   window.location.href = url;
 
 }
+
+
+
+/* ==========================================================
+   SIGNATURE ELECTRONIQUE — CANVAS ROBUSTE
+   ========================================================== */
+let signatureCanvas = null;
+let signatureCtx = null;
+let signatureDrawing = false;
+let signatureHasContent = false;
+let signatureLastX = 0;
+let signatureLastY = 0;
+
+function resizeSignatureCanvas() {
+  if (!signatureCanvas) return;
+  const rect = signatureCanvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+  const old = signatureHasContent ? document.createElement('canvas') : null;
+  if (old) {
+    old.width = signatureCanvas.width;
+    old.height = signatureCanvas.height;
+    const oc = old.getContext('2d');
+    if (oc) oc.drawImage(signatureCanvas, 0, 0);
+  }
+  signatureCanvas.width = Math.round(rect.width * dpr);
+  signatureCanvas.height = Math.round(rect.height * dpr);
+  signatureCtx = signatureCanvas.getContext('2d');
+  if (!signatureCtx) return;
+  signatureCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  signatureCtx.lineWidth = 3.5;
+  signatureCtx.lineCap = 'round';
+  signatureCtx.lineJoin = 'round';
+  signatureCtx.strokeStyle = '#17202a';
+  signatureCtx.fillStyle = '#17202a';
+  if (old) {
+    try { signatureCtx.drawImage(old, 0, 0, old.width/dpr, old.height/dpr, 0, 0, rect.width, rect.height); } catch (_) {}
+  }
+}
+
+function signaturePosition(e) {
+  const r = signatureCanvas.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+
+function startSignature(e) {
+  if (!signatureCanvas || !signatureCtx) return;
+  e.preventDefault();
+  const p = signaturePosition(e);
+  signatureDrawing = true;
+  signatureHasContent = true;
+  signatureLastX = p.x;
+  signatureLastY = p.y;
+  signatureCtx.beginPath();
+  signatureCtx.arc(p.x, p.y, 2.5, 0, Math.PI*2);
+  signatureCtx.fill();
+  const ph = document.getElementById('signaturePlaceholder');
+  const st = document.getElementById('signatureStatus');
+  if (ph) ph.style.display = 'none';
+  if (st) st.textContent = 'Signature en cours…';
+  if (e.pointerId != null && signatureCanvas.setPointerCapture) {
+    try { signatureCanvas.setPointerCapture(e.pointerId); } catch (_) {}
+  }
+}
+
+function moveSignature(e) {
+  if (!signatureDrawing || !signatureCtx) return;
+  e.preventDefault();
+  const p = signaturePosition(e);
+  signatureCtx.beginPath();
+  signatureCtx.moveTo(signatureLastX, signatureLastY);
+  signatureCtx.lineTo(p.x, p.y);
+  signatureCtx.stroke();
+  signatureLastX = p.x;
+  signatureLastY = p.y;
+}
+
+function endSignature(e) {
+  if (!signatureDrawing) return;
+  e.preventDefault();
+  signatureDrawing = false;
+  if (e.pointerId != null && signatureCanvas.releasePointerCapture) {
+    try { signatureCanvas.releasePointerCapture(e.pointerId); } catch (_) {}
+  }
+  const st = document.getElementById('signatureStatus');
+  if (st) st.textContent = '✓ Signature enregistrée sur cette page.';
+}
+
+function clearSignature() {
+  if (!signatureCanvas || !signatureCtx) return;
+  const r = signatureCanvas.getBoundingClientRect();
+  signatureCtx.clearRect(0, 0, r.width, r.height);
+  signatureDrawing = false;
+  signatureHasContent = false;
+  const ph = document.getElementById('signaturePlaceholder');
+  const st = document.getElementById('signatureStatus');
+  if (ph) ph.style.display = '';
+  if (st) st.textContent = '';
+}
+
+function initSignaturePad() {
+  signatureCanvas = document.getElementById('signaturePad');
+  if (!signatureCanvas) return;
+  signatureCanvas.style.touchAction = 'none';
+  resizeSignatureCanvas();
+  signatureCanvas.addEventListener('pointerdown', startSignature, {passive:false});
+  signatureCanvas.addEventListener('pointermove', moveSignature, {passive:false});
+  signatureCanvas.addEventListener('pointerup', endSignature, {passive:false});
+  signatureCanvas.addEventListener('pointercancel', endSignature, {passive:false});
+  if (!window.PointerEvent) {
+    signatureCanvas.addEventListener('touchstart', function(e){
+      const t=e.changedTouches[0]; if(!t) return;
+      startSignature({clientX:t.clientX,clientY:t.clientY,preventDefault:()=>e.preventDefault()});
+    }, {passive:false});
+    signatureCanvas.addEventListener('touchmove', function(e){
+      if(!signatureDrawing) return; const t=e.changedTouches[0]; if(!t) return;
+      moveSignature({clientX:t.clientX,clientY:t.clientY,preventDefault:()=>e.preventDefault()});
+    }, {passive:false});
+    signatureCanvas.addEventListener('touchend', function(e){endSignature({preventDefault:()=>e.preventDefault()});},{passive:false});
+  }
+  window.addEventListener('resize', resizeSignatureCanvas, {passive:true});
+}
+
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initSignaturePad, {once:true});
+else initSignaturePad();
 
 </script>
 
