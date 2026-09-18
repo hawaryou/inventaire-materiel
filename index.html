@@ -443,47 +443,7 @@
         width: 100%;
       }
     }
-  
-
-    /* ======================================================
-       SIGNATURE ELECTRONIQUE
-       ====================================================== */
-    .signature-card {
-      background: white;
-      padding: 18px;
-      margin-bottom: 15px;
-      border-radius: 12px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-    }
-    .signature-title { margin: 0 0 6px; font-size: 18px; }
-    .signature-help { color:#666; font-size:13px; line-height:1.45; margin:0 0 12px; }
-    .signature-pad-wrap {
-      position:relative; width:100%; height:190px; border:2px dashed #b8c2cc;
-      border-radius:10px; background:#fff; overflow:hidden; touch-action:none;
-    }
-    #signaturePad {
-      position:absolute; inset:0; display:block; width:100%; height:100%;
-      z-index:20; touch-action:none !important; cursor:crosshair;
-      background:transparent; -webkit-user-select:none; user-select:none;
-      -webkit-touch-callout:none;
-    }
-    .signature-placeholder {
-      position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
-      color:#a0a8b0; font-size:14px; pointer-events:none; text-align:center;
-      white-space:nowrap; z-index:5;
-    }
-    .signature-line {
-      position:absolute; left:8%; right:8%; bottom:38px;
-      border-bottom:1px solid #cbd2d9; pointer-events:none; z-index:5;
-    }
-    .signature-actions { display:flex; gap:10px; margin-top:10px; }
-    .signature-clear { flex:1; background:#f3f4f6; color:#333; border:1px solid #d1d5db; }
-    .signature-status { margin-top:9px; font-size:13px; font-weight:600; color:#188038; min-height:18px; }
-    @media (max-width:500px) {
-      .signature-pad-wrap { height:175px; }
-      .signature-placeholder { white-space:normal; width:80%; }
-    }
-</style>
+  </style>
 
 <style id="euromed-logo-style">
 .euromed-logo{width:min(92vw,700px);margin:8px auto 18px;text-align:center;display:flex;justify-content:center;align-items:center}
@@ -891,22 +851,6 @@
   </div>
 
 
-  <!-- SIGNATURE ELECTRONIQUE -->
-  <div class="signature-card">
-    <h2 class="signature-title">Signature électronique <span class="required">*</span></h2>
-    <p class="signature-help">Signez directement avec le doigt, un stylet ou la souris dans la zone ci-dessous. La signature est obligatoire avant de poursuivre.</p>
-    <div class="signature-pad-wrap" id="signaturePadWrap">
-      <canvas id="signaturePad" aria-label="Zone de signature électronique"></canvas>
-      <div class="signature-placeholder" id="signaturePlaceholder">Signez ici avec votre doigt</div>
-      <div class="signature-line"></div>
-    </div>
-    <div class="signature-actions">
-      <button type="button" class="signature-clear" onclick="clearSignature()">Effacer la signature</button>
-    </div>
-    <div id="signatureStatus" class="signature-status" aria-live="polite"></div>
-  </div>
-
-
   <!-- BOUTON FINAL -->
   <div class="card">
 
@@ -920,116 +864,6 @@
   </div>
 
 </div>
-
-
-<script>
-/* ==========================================================
-   SIGNATURE — MODULE AUTONOME COMPATIBLE SOURIS + TACTILE
-   ========================================================== */
-(function () {
-  function initSignature() {
-    const canvas = document.getElementById('signaturePad');
-    const wrap = document.getElementById('signaturePadWrap');
-    const placeholder = document.getElementById('signaturePlaceholder');
-    const status = document.getElementById('signatureStatus');
-    const clearBtn = document.querySelector('.signature-clear');
-    if (!canvas || !wrap) return;
-
-    let drawing = false;
-    let hasInk = false;
-    let lastX = 0, lastY = 0;
-    const ctx = canvas.getContext('2d');
-
-    function setup() {
-      const rect = wrap.getBoundingClientRect();
-      const w = Math.max(300, Math.round(rect.width));
-      const h = Math.max(140, Math.round(rect.height));
-      const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
-      canvas.width = Math.round(w * dpr);
-      canvas.height = Math.round(h * dpr);
-      canvas.style.width = w + 'px';
-      canvas.style.height = h + 'px';
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.lineWidth = 4;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.strokeStyle = '#111827';
-      ctx.fillStyle = '#111827';
-    }
-
-    function pos(e) {
-      const r = canvas.getBoundingClientRect();
-      return { x: e.clientX - r.left, y: e.clientY - r.top };
-    }
-
-    function down(e) {
-      if (e.cancelable) e.preventDefault();
-      const p = pos(e);
-      drawing = true;
-      hasInk = true;
-      lastX = p.x; lastY = p.y;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 2.2, 0, Math.PI * 2);
-      ctx.fill();
-      if (placeholder) placeholder.style.display = 'none';
-      if (status) status.textContent = '✓ Signature enregistrée';
-      if (e.pointerId !== undefined && canvas.setPointerCapture) {
-        try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
-      }
-    }
-
-    function move(e) {
-      if (!drawing) return;
-      if (e.cancelable) e.preventDefault();
-      const p = pos(e);
-      ctx.beginPath();
-      ctx.moveTo(lastX, lastY);
-      ctx.lineTo(p.x, p.y);
-      ctx.stroke();
-      lastX = p.x; lastY = p.y;
-    }
-
-    function up(e) {
-      if (!drawing) return;
-      if (e.cancelable) e.preventDefault();
-      drawing = false;
-      if (e.pointerId !== undefined && canvas.releasePointerCapture) {
-        try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
-      }
-    }
-
-    function clear() {
-      setup();
-      hasInk = false;
-      drawing = false;
-      if (placeholder) placeholder.style.display = '';
-      if (status) status.textContent = '';
-    }
-
-    setup();
-    canvas.style.pointerEvents = 'auto';
-    canvas.style.touchAction = 'none';
-    canvas.addEventListener('pointerdown', down, { passive: false });
-    canvas.addEventListener('pointermove', move, { passive: false });
-    canvas.addEventListener('pointerup', up, { passive: false });
-    canvas.addEventListener('pointercancel', up, { passive: false });
-    canvas.addEventListener('pointerleave', up, { passive: false });
-    if (clearBtn) clearBtn.addEventListener('click', clear);
-    window.addEventListener('resize', function () {
-      if (!hasInk) setup();
-    });
-
-    window.signatureHasContent = function () { return hasInk; };
-    window.clearSignature = clear;
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initSignature, { once: true });
-  } else {
-    initSignature();
-  }
-})();
-</script>
 
 
 <script>
@@ -1828,14 +1662,6 @@ function openGoogleForm() {
     document.getElementById("matelas").value.trim();
 
 
-  /* Signature obligatoire */
-  if (!originalSignatureState()) {
-    showMessage("Veuillez signer électroniquement avant de poursuivre.", "error");
-    document.getElementById("signaturePad")?.scrollIntoView({behavior:"smooth", block:"center"});
-    return;
-  }
-
-
   /* Champs obligatoires */
 
   if (!foyer) {
@@ -1970,13 +1796,6 @@ function openGoogleForm() {
 
 }
 
-
-
-/* Signature gérée par le module autonome placé avant ce script. */
-let signatureHasContent = false;
-const originalSignatureState = () => {
-  try { return typeof window.signatureHasContent === 'function' && window.signatureHasContent(); } catch (_) { return false; }
-};
 </script>
 
 
