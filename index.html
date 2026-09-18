@@ -924,6 +924,116 @@
 
 <script>
 /* ==========================================================
+   SIGNATURE — MODULE AUTONOME COMPATIBLE SOURIS + TACTILE
+   ========================================================== */
+(function () {
+  function initSignature() {
+    const canvas = document.getElementById('signaturePad');
+    const wrap = document.getElementById('signaturePadWrap');
+    const placeholder = document.getElementById('signaturePlaceholder');
+    const status = document.getElementById('signatureStatus');
+    const clearBtn = document.querySelector('.signature-clear');
+    if (!canvas || !wrap) return;
+
+    let drawing = false;
+    let hasInk = false;
+    let lastX = 0, lastY = 0;
+    const ctx = canvas.getContext('2d');
+
+    function setup() {
+      const rect = wrap.getBoundingClientRect();
+      const w = Math.max(300, Math.round(rect.width));
+      const h = Math.max(140, Math.round(rect.height));
+      const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
+      canvas.style.width = w + 'px';
+      canvas.style.height = h + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.lineWidth = 4;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.strokeStyle = '#111827';
+      ctx.fillStyle = '#111827';
+    }
+
+    function pos(e) {
+      const r = canvas.getBoundingClientRect();
+      return { x: e.clientX - r.left, y: e.clientY - r.top };
+    }
+
+    function down(e) {
+      if (e.cancelable) e.preventDefault();
+      const p = pos(e);
+      drawing = true;
+      hasInk = true;
+      lastX = p.x; lastY = p.y;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+      if (placeholder) placeholder.style.display = 'none';
+      if (status) status.textContent = '✓ Signature enregistrée';
+      if (e.pointerId !== undefined && canvas.setPointerCapture) {
+        try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+      }
+    }
+
+    function move(e) {
+      if (!drawing) return;
+      if (e.cancelable) e.preventDefault();
+      const p = pos(e);
+      ctx.beginPath();
+      ctx.moveTo(lastX, lastY);
+      ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+      lastX = p.x; lastY = p.y;
+    }
+
+    function up(e) {
+      if (!drawing) return;
+      if (e.cancelable) e.preventDefault();
+      drawing = false;
+      if (e.pointerId !== undefined && canvas.releasePointerCapture) {
+        try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
+      }
+    }
+
+    function clear() {
+      setup();
+      hasInk = false;
+      drawing = false;
+      if (placeholder) placeholder.style.display = '';
+      if (status) status.textContent = '';
+    }
+
+    setup();
+    canvas.style.pointerEvents = 'auto';
+    canvas.style.touchAction = 'none';
+    canvas.addEventListener('pointerdown', down, { passive: false });
+    canvas.addEventListener('pointermove', move, { passive: false });
+    canvas.addEventListener('pointerup', up, { passive: false });
+    canvas.addEventListener('pointercancel', up, { passive: false });
+    canvas.addEventListener('pointerleave', up, { passive: false });
+    if (clearBtn) clearBtn.addEventListener('click', clear);
+    window.addEventListener('resize', function () {
+      if (!hasInk) setup();
+    });
+
+    window.signatureHasContent = function () { return hasInk; };
+    window.clearSignature = clear;
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initSignature, { once: true });
+  } else {
+    initSignature();
+  }
+})();
+</script>
+
+
+<script>
+/* ==========================================================
    GOOGLE FORM
    ========================================================== */
 
@@ -1719,7 +1829,7 @@ function openGoogleForm() {
 
 
   /* Signature obligatoire */
-  if (!signatureHasContent) {
+  if (!originalSignatureState()) {
     showMessage("Veuillez signer électroniquement avant de poursuivre.", "error");
     document.getElementById("signaturePad")?.scrollIntoView({behavior:"smooth", block:"center"});
     return;
@@ -1862,129 +1972,11 @@ function openGoogleForm() {
 
 
 
-/* ==========================================================
-   SIGNATURE ELECTRONIQUE — CANVAS ROBUSTE
-   ========================================================== */
-let signatureCanvas = null;
-let signatureCtx = null;
-let signatureDrawing = false;
+/* Signature gérée par le module autonome placé avant ce script. */
 let signatureHasContent = false;
-let signatureLastX = 0;
-let signatureLastY = 0;
-
-function resizeSignatureCanvas() {
-  if (!signatureCanvas) return;
-  const rect = signatureCanvas.getBoundingClientRect();
-  if (!rect.width || !rect.height) return;
-  const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
-  const old = signatureHasContent ? document.createElement('canvas') : null;
-  if (old) {
-    old.width = signatureCanvas.width;
-    old.height = signatureCanvas.height;
-    const oc = old.getContext('2d');
-    if (oc) oc.drawImage(signatureCanvas, 0, 0);
-  }
-  signatureCanvas.width = Math.round(rect.width * dpr);
-  signatureCanvas.height = Math.round(rect.height * dpr);
-  signatureCtx = signatureCanvas.getContext('2d');
-  if (!signatureCtx) return;
-  signatureCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  signatureCtx.lineWidth = 3.5;
-  signatureCtx.lineCap = 'round';
-  signatureCtx.lineJoin = 'round';
-  signatureCtx.strokeStyle = '#17202a';
-  signatureCtx.fillStyle = '#17202a';
-  if (old) {
-    try { signatureCtx.drawImage(old, 0, 0, old.width/dpr, old.height/dpr, 0, 0, rect.width, rect.height); } catch (_) {}
-  }
-}
-
-function signaturePosition(e) {
-  const r = signatureCanvas.getBoundingClientRect();
-  return { x: e.clientX - r.left, y: e.clientY - r.top };
-}
-
-function startSignature(e) {
-  if (!signatureCanvas || !signatureCtx) return;
-  e.preventDefault();
-  const p = signaturePosition(e);
-  signatureDrawing = true;
-  signatureHasContent = true;
-  signatureLastX = p.x;
-  signatureLastY = p.y;
-  signatureCtx.beginPath();
-  signatureCtx.arc(p.x, p.y, 2.5, 0, Math.PI*2);
-  signatureCtx.fill();
-  const ph = document.getElementById('signaturePlaceholder');
-  const st = document.getElementById('signatureStatus');
-  if (ph) ph.style.display = 'none';
-  if (st) st.textContent = 'Signature en cours…';
-  if (e.pointerId != null && signatureCanvas.setPointerCapture) {
-    try { signatureCanvas.setPointerCapture(e.pointerId); } catch (_) {}
-  }
-}
-
-function moveSignature(e) {
-  if (!signatureDrawing || !signatureCtx) return;
-  e.preventDefault();
-  const p = signaturePosition(e);
-  signatureCtx.beginPath();
-  signatureCtx.moveTo(signatureLastX, signatureLastY);
-  signatureCtx.lineTo(p.x, p.y);
-  signatureCtx.stroke();
-  signatureLastX = p.x;
-  signatureLastY = p.y;
-}
-
-function endSignature(e) {
-  if (!signatureDrawing) return;
-  e.preventDefault();
-  signatureDrawing = false;
-  if (e.pointerId != null && signatureCanvas.releasePointerCapture) {
-    try { signatureCanvas.releasePointerCapture(e.pointerId); } catch (_) {}
-  }
-  const st = document.getElementById('signatureStatus');
-  if (st) st.textContent = '✓ Signature enregistrée sur cette page.';
-}
-
-function clearSignature() {
-  if (!signatureCanvas || !signatureCtx) return;
-  const r = signatureCanvas.getBoundingClientRect();
-  signatureCtx.clearRect(0, 0, r.width, r.height);
-  signatureDrawing = false;
-  signatureHasContent = false;
-  const ph = document.getElementById('signaturePlaceholder');
-  const st = document.getElementById('signatureStatus');
-  if (ph) ph.style.display = '';
-  if (st) st.textContent = '';
-}
-
-function initSignaturePad() {
-  signatureCanvas = document.getElementById('signaturePad');
-  if (!signatureCanvas) return;
-  signatureCanvas.style.touchAction = 'none';
-  resizeSignatureCanvas();
-  signatureCanvas.addEventListener('pointerdown', startSignature, {passive:false});
-  signatureCanvas.addEventListener('pointermove', moveSignature, {passive:false});
-  signatureCanvas.addEventListener('pointerup', endSignature, {passive:false});
-  signatureCanvas.addEventListener('pointercancel', endSignature, {passive:false});
-  if (!window.PointerEvent) {
-    signatureCanvas.addEventListener('touchstart', function(e){
-      const t=e.changedTouches[0]; if(!t) return;
-      startSignature({clientX:t.clientX,clientY:t.clientY,preventDefault:()=>e.preventDefault()});
-    }, {passive:false});
-    signatureCanvas.addEventListener('touchmove', function(e){
-      if(!signatureDrawing) return; const t=e.changedTouches[0]; if(!t) return;
-      moveSignature({clientX:t.clientX,clientY:t.clientY,preventDefault:()=>e.preventDefault()});
-    }, {passive:false});
-    signatureCanvas.addEventListener('touchend', function(e){endSignature({preventDefault:()=>e.preventDefault()});},{passive:false});
-  }
-  window.addEventListener('resize', resizeSignatureCanvas, {passive:true});
-}
-
-if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initSignaturePad, {once:true});
-else initSignaturePad();
-
+const originalSignatureState = () => {
+  try { return typeof window.signatureHasContent === 'function' && window.signatureHasContent(); } catch (_) { return false; }
+};
 </script>
 
 
