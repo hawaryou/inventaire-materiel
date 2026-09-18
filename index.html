@@ -7,7 +7,9 @@
 
   <!-- Lecteur EAN-13 / CODE 128 / QR -->
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-  <script src="https://unpkg.com/@zxing/browser@0.2.1/umd/zxing-browser.min.js"></script>
+  <!-- Moteur 1D/Code 128 : ZBar compilé en WebAssembly, plus robuste sur iPhone -->
+  <script src="https://cdn.jsdelivr.net/npm/@undecaf/zbar-wasm@0.9.15/dist/index.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@undecaf/barcode-detector-polyfill@0.9.23/dist/index.js"></script>
 
   <style>
     * { box-sizing: border-box; }
@@ -726,7 +728,6 @@ async function startScanner(field, mode = 'qr') {
   activeField = field;
 
   const scannerContainer = document.getElementById("scanner-" + field);
-
   scannerContainer.style.display = "block";
 
   if (
@@ -752,17 +753,24 @@ async function startScanner(field, mode = 'qr') {
   if (title) {
     title.textContent = isQrMode
       ? 'Scanner le QR Code — mode précis'
-      : 'Scanner le CODE 128 — mode haute précision';
+      : 'Scanner le CODE 128 — moteur renforcé iPhone';
   }
 
-  /*
-   * QR : html5-qrcode reste utilisé.
-   * Code 128 : pipeline caméra + Canvas + ZXing. On analyse plusieurs
-   * bandes horizontales agrandies, ce qui aide les codes longs/fins.
-   */
   if (!isQrMode) {
-    if (!window.ZXingBrowser || !window.ZXingBrowser.BrowserMultiFormatOneDReader) {
-      showMessage("Le lecteur Code 128 n'est pas chargé. Rechargez la page.", "error");
+    /*
+     * IMPORTANT : on abandonne ici le décodage ZXing JavaScript.
+     *
+     * Sur iPhone/Safari, le lecteur Code 128 JS peut être très irrégulier.
+     * ZBar compilé en WebAssembly est utilisé via BarcodeDetectorPolyfill.
+     * Le polyfill sait analyser directement un élément <video> et supporte
+     * explicitement Code 128.
+     */
+    if (!window.barcodeDetectorPolyfill ||
+        !window.barcodeDetectorPolyfill.BarcodeDetectorPolyfill) {
+      showMessage(
+        "Le moteur Code 128 n'est pas chargé. Vérifiez la connexion Internet puis rechargez la page.",
+        "error"
+      );
       scannerContainer.style.display = "none";
       activeField = null;
       return;
@@ -778,6 +786,11 @@ async function startScanner(field, mode = 'qr') {
       preview.muted = true;
       preview.playsInline = true;
       preview.setAttribute('playsinline', 'true');
+      preview.setAttribute('webkit-playsinline', 'true');
+      preview.style.width = '100%';
+      preview.style.display = 'block';
+      preview.style.objectFit = 'cover';
+      preview.style.aspectRatio = '16 / 9';
       previewContainer.appendChild(preview);
 
       let stream;
@@ -786,61 +799,56 @@ async function startScanner(field, mode = 'qr') {
           video: {
             facingMode: { ideal: 'environment' },
             width: { ideal: 1920 },
-            height: { ideal: 1080 }
+            height: { ideal: 1080 },
+            frameRate: { ideal: 30, max: 30 }
           },
           audio: false
         });
       } catch (e) {
         console.warn('Fallback caméra:', e);
-        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment' },
+          audio: false
+        });
       }
 
       preview.srcObject = stream;
       await preview.play();
-      await new Promise(resolve => setTimeout(resolve, 350));
+
+      // Laisse Safari fournir les premières images réelles.
+      await new Promise(resolve => setTimeout(resolve, 500));
 
       if (!preview.videoWidth || !preview.videoHeight) {
         throw new Error('Le flux caméra ne fournit aucune image vidéo.');
       }
 
-      const barcodeReader = new ZXingBrowser.BrowserMultiFormatOneDReader();
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      const contrastCanvas = document.createElement('canvas');
-      const contrastCtx = contrastCanvas.getContext('2d', { willReadFrequently: true });
+      const detector = new barcodeDetectorPolyfill.BarcodeDetectorPolyfill({
+        formats: ['code_128']
+      });
 
       let lastText = '';
       let confirmations = 0;
       let lastAt = 0;
       let finished = false;
-      let scanning = false;
+      let running = true;
       let timer = null;
-
-      function resizeCanvas(c, w, h) {
-        if (c.width !== w) c.width = w;
-        if (c.height !== h) c.height = h;
-      }
-
-      function decodeCanvas(c) {
-        try {
-          const result = barcodeReader.decodeFromCanvas(c);
-          if (!result) return null;
-          return result.getText ? result.getText().trim() : String(result.text || '').trim();
-        } catch (e) {
-          return null;
-        }
-      }
+      let detecting = false;
 
       function accept(text) {
         if (!text || finished) return false;
+        text = String(text).trim();
+        if (!text) return false;
+
         const now = Date.now();
-        if (text === lastText && now - lastAt < 1800) {
+        if (text === lastText && now - lastAt < 2200) {
           confirmations++;
         } else {
           lastText = text;
           confirmations = 1;
         }
         lastAt = now;
+
+        // Deux lectures identiques évitent les faux positifs.
         if (confirmations < 2) return false;
 
         finished = true;
@@ -850,224 +858,106 @@ async function startScanner(field, mode = 'qr') {
         return true;
       }
 
-      async function scanFrame() {
-        if (finished || scanning || !preview.videoWidth) return;
-        scanning = true;
+      async function detectFrame() {
+        if (!running || finished || detecting || !preview.videoWidth) return;
+        detecting = true;
         try {
-          const vw = preview.videoWidth;
-          const vh = preview.videoHeight;
-          const sx = Math.floor(vw * 0.02);
-          const sw = Math.floor(vw * 0.96);
-          const bands = [
-            { y: 0.16, h: 0.28 },
-            { y: 0.36, h: 0.28 },
-            { y: 0.56, h: 0.28 }
-          ];
-          const scale = vw < 1500 ? 2.0 : 1.5;
-
-          for (const band of bands) {
-            if (finished) break;
-            const sy = Math.max(0, Math.floor(vh * band.y));
-            const sh = Math.min(vh - sy, Math.floor(vh * band.h));
-            if (sh < 40) continue;
-            const dw = Math.min(3600, Math.floor(sw * scale));
-            const dh = Math.min(900, Math.floor(sh * scale));
-
-            resizeCanvas(canvas, dw, dh);
-            ctx.setTransform(1, 0, 0, 1, 0, 0);
-            ctx.imageSmoothingEnabled = false;
-            ctx.clearRect(0, 0, dw, dh);
-            ctx.drawImage(preview, sx, sy, sw, sh, 0, 0, dw, dh);
-
-            let text = decodeCanvas(canvas);
-            if (accept(text)) break;
-
-            resizeCanvas(contrastCanvas, dw, dh);
-            contrastCtx.setTransform(1, 0, 0, 1, 0, 0);
-            contrastCtx.imageSmoothingEnabled = false;
-            contrastCtx.filter = 'grayscale(1) contrast(1.55)';
-            contrastCtx.clearRect(0, 0, dw, dh);
-            contrastCtx.drawImage(preview, sx, sy, sw, sh, 0, 0, dw, dh);
-            contrastCtx.filter = 'none';
-
-            text = decodeCanvas(contrastCanvas);
-            if (accept(text)) break;
+          const barcodes = await detector.detect(preview);
+          if (barcodes && barcodes.length) {
+            for (const barcode of barcodes) {
+              if (accept(barcode.rawValue)) break;
+            }
           }
+        } catch (e) {
+          // NotFound / image momentanément indisponible : on continue.
         } finally {
-          scanning = false;
+          detecting = false;
         }
       }
 
       activeScanner = {
-        reader: barcodeReader,
-        controls: null,
+        detector: detector,
         stream: stream,
         video: preview,
         timer: null,
-        customCanvasScanner: true
+        customCanvasScanner: false,
+        running: () => { running = false; }
       };
-      activeScannerType = 'zxing';
+      activeScannerType = 'zbar';
 
-      preview.style.width = '100%';
-      preview.style.display = 'block';
-      preview.style.objectFit = 'cover';
-      preview.style.aspectRatio = '16 / 9';
-
-      await scanFrame();
-      timer = setInterval(scanFrame, 330);
+      // Analyse continue sans saturer le CPU de l'iPhone.
+      timer = setInterval(detectFrame, 180);
       activeScanner.timer = timer;
+      await detectFrame();
 
       setTimeout(() => {
         if (activeScanner && activeScanner.video === preview) setCameraFocus();
-      }, 500);
+      }, 600);
 
     } catch (error) {
-      console.error('ZXing Code 128:', error);
+      console.error('ZBar Code 128:', error);
       showMessage(
-        "Impossible d'utiliser la caméra pour le Code 128." +
+        "Impossible d'utiliser le moteur Code 128." +
         (error && error.message ? ' (' + error.message + ')' : ''),
         'error'
       );
-      scannerContainer.style.display = 'none';
-      activeScanner = null;
-      activeScannerType = null;
+      try {
+        if (typeof stream !== 'undefined' && stream) {
+          stream.getTracks().forEach(track => track.stop());
+        }
+      } catch (e) {}
+      scannerContainer.style.display = "none";
       activeField = null;
     }
+
     return;
   }
 
-  /* ========================= QR CODE ========================= */
+  // QR Code : html5-qrcode reste inchangé.
+  try {
+    reader.className = 'reader';
 
-  activeScanner = new Html5Qrcode(readerId, {
-    formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE]
-  });
-  activeScannerType = 'html5';
+    const scanner = new Html5Qrcode(readerId, {
+      formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE]
+    });
 
-  const config = {
-    fps: 10,
-    formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
-    useBarCodeDetectorIfSupported: false,
-    aspectRatio: 16 / 9,
-    videoConstraints: {
-      facingMode: { ideal: "environment" },
-      width: { ideal: 1920 },
-      height: { ideal: 1080 },
-      frameRate: { ideal: 30, max: 30 }
-    },
-    qrbox: function(width, height) {
-      const size = Math.min(
-        Math.floor(width * 0.72),
-        Math.floor(height * 0.72),
-        520
-      );
-      return { width: size, height: size };
-    }
-  };
+    activeScanner = scanner;
+    activeScannerType = 'html5';
 
-  let lastDecodedText = null;
-  let lastDecodedAt = 0;
+    await scanner.start(
+      { facingMode: "environment" },
+      {
+        fps: 10,
+        qrbox: function(viewfinderWidth, viewfinderHeight) {
+          const size = Math.min(viewfinderWidth, viewfinderHeight) * 0.72;
+          return { width: size, height: size };
+        }
+      },
+      function(decodedText) {
+        if (!decodedText) return;
+        const cleanText = decodedText.trim();
+        document.getElementById(field).value = cleanText;
+        showMessage('QR Code détecté : ' + cleanText, 'success');
+        stopScanner(field);
+      },
+      function() {}
+    );
 
-  activeScanner.start(
-    { facingMode: "environment" },
-    config,
-    function(decodedText) {
-      if (!decodedText) return;
+    setTimeout(() => setCameraFocus(), 600);
 
-      const cleanText = decodedText.trim();
-      const now = Date.now();
-
-      if (cleanText !== lastDecodedText || now - lastDecodedAt > 1200) {
-        lastDecodedText = cleanText;
-        lastDecodedAt = now;
-        return;
-      }
-
-      document.getElementById(field).value = cleanText;
-      showMessage("QR Code enregistré : " + cleanText, "success");
-      stopScanner(field);
-    },
-    function() {}
-  ).catch(function(error) {
-    console.error(error);
+  } catch (error) {
+    console.error('QR:', error);
     showMessage(
-      "Impossible d'utiliser la caméra. Vérifiez l'autorisation caméra et le HTTPS." +
-      (error && error.message ? " (" + error.message + ")" : ""),
-      "error"
+      "Impossible d'utiliser la caméra pour le QR Code." +
+      (error && error.message ? ' (' + error.message + ')' : ''),
+      'error'
     );
     scannerContainer.style.display = "none";
     activeScanner = null;
     activeScannerType = null;
     activeField = null;
-  });
-}
-
-
-/* ==========================================================
-   CONTROLES CAMERA
-   ========================================================== */
-
-function getActiveVideoTrack() {
-  if (!activeField) return null;
-  const video = document.querySelector('#reader-' + activeField + ' video');
-  if (!video || !video.srcObject) return null;
-  const tracks = video.srcObject.getVideoTracks();
-  return tracks && tracks.length ? tracks[0] : null;
-}
-
-async function setCameraZoom(targetZoom) {
-  const track = getActiveVideoTrack();
-  if (!track) return;
-
-  try {
-    const capabilities = track.getCapabilities ? track.getCapabilities() : {};
-    const z = capabilities && capabilities.zoom;
-
-    if (!z) {
-      showMessage(
-        "Le zoom matériel n'est pas disponible sur cet iPhone. Approchez doucement le téléphone.",
-        "info"
-      );
-      return;
-    }
-
-    const target = Math.min(z.max, Math.max(z.min, targetZoom));
-    await track.applyConstraints({ advanced: [{ zoom: target }] });
-    showMessage("Zoom caméra : ×" + target.toFixed(1), "info");
-  } catch (error) {
-    console.warn("Zoom caméra non disponible :", error);
-    showMessage(
-      "Le zoom n'est pas réglable depuis ce navigateur. Approchez le téléphone sans couper le code.",
-      "info"
-    );
   }
 }
-
-async function setCameraFocus() {
-  const track = getActiveVideoTrack();
-  if (!track) return;
-
-  try {
-    const capabilities = track.getCapabilities ? track.getCapabilities() : {};
-
-    if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
-      await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
-      showMessage("Autofocus continu activé. Maintenez le code stable 1 seconde.", "info");
-      return;
-    }
-
-    showMessage(
-      "L'autofocus continu n'est pas pilotable par Safari. L'iPhone garde sa mise au point automatique.",
-      "info"
-    );
-  } catch (error) {
-    console.warn("Autofocus continu non disponible :", error);
-    showMessage(
-      "L'autofocus est géré automatiquement par l'iPhone. Approchez lentement jusqu'à ce que les traits soient nets.",
-      "info"
-    );
-  }
-}
-
 
 /* ==========================================================
    ARRETER LE SCANNER
@@ -1092,11 +982,12 @@ async function stopScanner(field) {
   }
 
   try {
-    if (typeToStop === 'zxing') {
+    if (typeToStop === 'zbar') {
       if (scannerToStop.timer) {
         clearInterval(scannerToStop.timer);
         scannerToStop.timer = null;
       }
+      if (scannerToStop.running) scannerToStop.running();
       if (scannerToStop.controls) scannerToStop.controls.stop();
       if (scannerToStop.stream) {
         scannerToStop.stream.getTracks().forEach(track => track.stop());
