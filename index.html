@@ -187,7 +187,7 @@
       left: 3%;
       right: 3%;
       top: 42%;
-      height: 18%;
+      height: 26%;
       border: 3px solid rgba(255,255,255,.9);
       border-radius: 8px;
       box-shadow: 0 0 0 9999px rgba(0,0,0,.18);
@@ -841,6 +841,38 @@ async function startScanner(field, mode = 'qr') {
       let timer = null;
       let detecting = false;
 
+      // Mode rapide : au lieu d'envoyer toute l'image 1920x1080 à ZBar,
+      // on lui donne uniquement la bande horizontale où l'utilisateur vise
+      // le Code 128. Cela réduit fortement le travail sur l'iPhone sans
+      // réduire la résolution des barres elles-mêmes.
+      const scanCanvas = document.createElement('canvas');
+      const scanCtx = scanCanvas.getContext('2d', { willReadFrequently: true });
+
+      function getScanRegion() {
+        const vw = preview.videoWidth;
+        const vh = preview.videoHeight;
+        // Largeur presque complète, hauteur centrée : adaptée au long Code 128.
+        const cropW = Math.round(vw * 0.94);
+        const cropH = Math.round(vh * 0.30);
+        const sx = Math.round((vw - cropW) / 2);
+        const sy = Math.round((vh - cropH) / 2);
+        return { sx, sy, cropW, cropH };
+      }
+
+      function prepareScanCanvas() {
+        const r = getScanRegion();
+        if (scanCanvas.width !== r.cropW || scanCanvas.height !== r.cropH) {
+          scanCanvas.width = r.cropW;
+          scanCanvas.height = r.cropH;
+        }
+        scanCtx.drawImage(
+          preview,
+          r.sx, r.sy, r.cropW, r.cropH,
+          0, 0, r.cropW, r.cropH
+        );
+        return r;
+      }
+
       function accept(text) {
         if (!text || finished) return false;
         text = String(text).trim();
@@ -869,14 +901,18 @@ async function startScanner(field, mode = 'qr') {
         if (!running || finished || detecting || !preview.videoWidth) return;
         detecting = true;
         try {
-          const barcodes = await detector.detect(preview);
+          // ZBar travaille directement sur le canvas recadré.
+          // Le recadrage est fait à la résolution native de la caméra :
+          // aucune perte de détail des fines barres du Code 128.
+          prepareScanCanvas();
+          const barcodes = await detector.detect(scanCanvas);
           if (barcodes && barcodes.length) {
             for (const barcode of barcodes) {
-              if (accept(barcode.rawValue)) break;
+              if (barcode.format === 'code_128' && accept(barcode.rawValue)) break;
             }
           }
         } catch (e) {
-          // NotFound / image momentanément indisponible : on continue.
+          // Image momentanément indisponible : on continue au prochain cycle.
         } finally {
           detecting = false;
         }
@@ -892,8 +928,8 @@ async function startScanner(field, mode = 'qr') {
       };
       activeScannerType = 'zbar';
 
-      // Analyse continue sans saturer le CPU de l'iPhone.
-      timer = setInterval(detectFrame, 180);
+      // Analyse plus fréquente maintenant que seule la bande utile est envoyée à ZBar.
+      timer = setInterval(detectFrame, 110);
       activeScanner.timer = timer;
       await detectFrame();
 
