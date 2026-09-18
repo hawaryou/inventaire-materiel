@@ -479,11 +479,19 @@
     }
 
     #signaturePad {
+      position: absolute;
+      inset: 0;
       display: block;
       width: 100%;
       height: 100%;
       touch-action: none;
       cursor: crosshair;
+      z-index: 2;
+      background: transparent;
+    }
+
+    #signaturePath {
+      pointer-events: none;
     }
 
     .signature-placeholder {
@@ -958,7 +966,9 @@
     </p>
 
     <div class="signature-pad-wrap" id="signaturePadWrap">
-      <canvas id="signaturePad" aria-label="Zone de signature électronique"></canvas>
+      <svg id="signaturePad" class="signature-svg" viewBox="0 0 1000 400" preserveAspectRatio="none" aria-label="Zone de signature électronique" role="img">
+        <path id="signaturePath" d="" fill="none" stroke="#17202a" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"></path>
+      </svg>
       <div class="signature-placeholder" id="signaturePlaceholder">Signez ici avec votre doigt</div>
       <div class="signature-line"></div>
     </div>
@@ -1756,145 +1766,93 @@ async function scanPhoto(field, input) {
 
 
 /* ==========================================================
-   SIGNATURE ELECTRONIQUE
+   SIGNATURE ELECTRONIQUE — SVG, tactile + souris
    ========================================================== */
 
 let signaturePad = null;
-let signatureCtx = null;
+let signaturePath = null;
 let signatureDrawing = false;
 let signatureHasContent = false;
-let signatureLastPoint = null;
+let signaturePoints = [];
 
-function resizeSignaturePad(preserve) {
-  if (!signaturePad || !signatureCtx) return;
-
+function signaturePointFromEvent(event) {
   const rect = signaturePad.getBoundingClientRect();
-  const cssWidth = Math.max(1, Math.round(rect.width));
-  const cssHeight = Math.max(1, Math.round(rect.height));
-  const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 3));
-  const oldImage = preserve && signatureHasContent ? signaturePad.toDataURL('image/png') : null;
+  const x = Math.max(0, Math.min(1000, ((event.clientX - rect.left) / rect.width) * 1000));
+  const y = Math.max(0, Math.min(400, ((event.clientY - rect.top) / rect.height) * 400));
+  return { x, y };
+}
 
-  signaturePad.width = Math.round(cssWidth * dpr);
-  signaturePad.height = Math.round(cssHeight * dpr);
-  signaturePad.style.width = cssWidth + 'px';
-  signaturePad.style.height = cssHeight + 'px';
+function renderSignature() {
+  if (!signaturePath || !signaturePoints.length) return;
 
-  signatureCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  signatureCtx.lineCap = 'round';
-  signatureCtx.lineJoin = 'round';
-  signatureCtx.strokeStyle = '#17202a';
-  signatureCtx.fillStyle = '#17202a';
-  signatureCtx.lineWidth = 3.2;
-
-  if (oldImage) {
-    const image = new Image();
-    image.onload = function() {
-      signatureCtx.drawImage(image, 0, 0, cssWidth, cssHeight);
-    };
-    image.src = oldImage;
+  if (signaturePoints.length === 1) {
+    const p = signaturePoints[0];
+    signaturePath.setAttribute('d', `M ${p.x} ${p.y} l 0.1 0.1`);
+    return;
   }
+
+  let d = `M ${signaturePoints[0].x} ${signaturePoints[0].y}`;
+  for (let i = 1; i < signaturePoints.length; i++) {
+    const p = signaturePoints[i];
+    d += ` L ${p.x} ${p.y}`;
+  }
+  signaturePath.setAttribute('d', d);
 }
 
-function getSignaturePoint(clientX, clientY) {
-  const rect = signaturePad.getBoundingClientRect();
-  return {
-    x: Math.max(0, Math.min(rect.width, clientX - rect.left)),
-    y: Math.max(0, Math.min(rect.height, clientY - rect.top))
-  };
-}
+function startSignature(event) {
+  if (!signaturePad) return;
+  event.preventDefault();
+  event.stopPropagation();
 
-function startSignature(clientX, clientY, pointerId) {
-  if (!signaturePad || !signatureCtx) return;
-  const point = getSignaturePoint(clientX, clientY);
   signatureDrawing = true;
   signatureHasContent = true;
-  signatureLastPoint = point;
-
-  if (pointerId !== undefined && signaturePad.setPointerCapture) {
-    try { signaturePad.setPointerCapture(pointerId); } catch (e) {}
-  }
+  signaturePoints = [signaturePointFromEvent(event)];
+  renderSignature();
 
   const placeholder = document.getElementById('signaturePlaceholder');
   const status = document.getElementById('signatureStatus');
   if (placeholder) placeholder.style.display = 'none';
   if (status) status.textContent = 'Signature en cours…';
 
-  // Petit point immédiat pour que même un simple appui soit visible.
-  signatureCtx.beginPath();
-  signatureCtx.arc(point.x, point.y, 1.6, 0, Math.PI * 2);
-  signatureCtx.fill();
-}
-
-function moveSignature(clientX, clientY) {
-  if (!signatureDrawing || !signatureLastPoint || !signatureCtx) return;
-  const point = getSignaturePoint(clientX, clientY);
-
-  const distance = Math.hypot(point.x - signatureLastPoint.x, point.y - signatureLastPoint.y);
-  if (distance < 0.5) return;
-
-  signatureCtx.beginPath();
-  signatureCtx.moveTo(signatureLastPoint.x, signatureLastPoint.y);
-  signatureCtx.lineTo(point.x, point.y);
-  signatureCtx.stroke();
-  signatureLastPoint = point;
-}
-
-function finishSignature(pointerId) {
-  if (!signatureDrawing) return;
-  signatureDrawing = false;
-  signatureLastPoint = null;
-  if (pointerId !== undefined && signaturePad && signaturePad.releasePointerCapture) {
-    try { signaturePad.releasePointerCapture(pointerId); } catch (e) {}
+  if (event.pointerId !== undefined && signaturePad.setPointerCapture) {
+    try { signaturePad.setPointerCapture(event.pointerId); } catch (e) {}
   }
-  const status = document.getElementById('signatureStatus');
-  if (status) status.textContent = 'Signature enregistrée sur cette page.';
 }
 
-function beginSignature(event) {
+function moveSignature(event) {
+  if (!signatureDrawing || !signaturePad) return;
   event.preventDefault();
-  startSignature(event.clientX, event.clientY, event.pointerId);
-}
+  event.stopPropagation();
 
-function drawSignature(event) {
-  if (!signatureDrawing) return;
-  event.preventDefault();
-  const events = typeof event.getCoalescedEvents === 'function' ? event.getCoalescedEvents() : [event];
-  for (const e of events) moveSignature(e.clientX, e.clientY);
+  const p = signaturePointFromEvent(event);
+  const last = signaturePoints[signaturePoints.length - 1];
+  if (!last || Math.hypot(p.x - last.x, p.y - last.y) >= 0.7) {
+    signaturePoints.push(p);
+    renderSignature();
+  }
 }
 
 function endSignature(event) {
-  event.preventDefault();
-  finishSignature(event.pointerId);
-}
-
-function touchStartSignature(event) {
-  event.preventDefault();
-  const touch = event.changedTouches[0];
-  if (touch) startSignature(touch.clientX, touch.clientY);
-}
-
-function touchMoveSignature(event) {
   if (!signatureDrawing) return;
   event.preventDefault();
-  for (const touch of event.changedTouches) {
-    moveSignature(touch.clientX, touch.clientY);
-  }
-}
+  event.stopPropagation();
+  signatureDrawing = false;
 
-function touchEndSignature(event) {
-  event.preventDefault();
-  finishSignature();
+  if (event.pointerId !== undefined && signaturePad && signaturePad.releasePointerCapture) {
+    try { signaturePad.releasePointerCapture(event.pointerId); } catch (e) {}
+  }
+
+  const status = document.getElementById('signatureStatus');
+  if (status) status.textContent = '✓ Signature enregistrée sur cette page.';
 }
 
 function clearSignature() {
-  if (!signaturePad || !signatureCtx) return;
-  signatureCtx.save();
-  signatureCtx.setTransform(1, 0, 0, 1, 0, 0);
-  signatureCtx.clearRect(0, 0, signaturePad.width, signaturePad.height);
-  signatureCtx.restore();
-  signatureHasContent = false;
+  if (!signaturePath) return;
+  signaturePoints = [];
   signatureDrawing = false;
-  signatureLastPoint = null;
+  signatureHasContent = false;
+  signaturePath.setAttribute('d', '');
+
   const placeholder = document.getElementById('signaturePlaceholder');
   const status = document.getElementById('signatureStatus');
   if (placeholder) placeholder.style.display = '';
@@ -1903,41 +1861,57 @@ function clearSignature() {
 
 function initSignaturePad() {
   signaturePad = document.getElementById('signaturePad');
-  if (!signaturePad) return;
-  signatureCtx = signaturePad.getContext('2d', { alpha: true });
-  if (!signatureCtx) return;
+  signaturePath = document.getElementById('signaturePath');
+  if (!signaturePad || !signaturePath) return;
 
-  // Important sur iPhone/iPad : on désactive les gestes du navigateur dans la zone.
+  // Empêche le défilement/zoom du navigateur pendant la signature.
   signaturePad.style.touchAction = 'none';
   signaturePad.style.webkitUserSelect = 'none';
   signaturePad.style.userSelect = 'none';
 
-  // Laisser le navigateur terminer la mise en page avant de mesurer le canvas.
-  requestAnimationFrame(() => resizeSignaturePad(false));
-
-  // Pointer Events (iPhone/Android modernes + souris/stylet).
-  signaturePad.addEventListener('pointerdown', beginSignature, { passive: false });
-  signaturePad.addEventListener('pointermove', drawSignature, { passive: false });
+  // Pointer Events : souris, trackpad, stylet, doigt.
+  signaturePad.addEventListener('pointerdown', startSignature, { passive: false });
+  signaturePad.addEventListener('pointermove', moveSignature, { passive: false });
   signaturePad.addEventListener('pointerup', endSignature, { passive: false });
   signaturePad.addEventListener('pointercancel', endSignature, { passive: false });
+  signaturePad.addEventListener('pointerleave', function(event) {
+    if (signatureDrawing && event.pointerType === 'mouse') endSignature(event);
+  }, { passive: false });
 
-  // Secours explicite pour Safari/iOS si les Pointer Events sont mal relayés.
-  signaturePad.addEventListener('touchstart', touchStartSignature, { passive: false });
-  signaturePad.addEventListener('touchmove', touchMoveSignature, { passive: false });
-  signaturePad.addEventListener('touchend', touchEndSignature, { passive: false });
-  signaturePad.addEventListener('touchcancel', touchEndSignature, { passive: false });
+  // Compatibilité supplémentaire pour les anciens navigateurs tactiles.
+  signaturePad.addEventListener('touchstart', function(e) {
+    if (window.PointerEvent) return;
+    const t = e.changedTouches[0];
+    if (!t) return;
+    startSignature({
+      clientX: t.clientX, clientY: t.clientY,
+      preventDefault: () => e.preventDefault(), stopPropagation: () => e.stopPropagation()
+    });
+  }, { passive: false });
 
-  window.addEventListener('resize', function() {
-    resizeSignaturePad(true);
-  });
+  signaturePad.addEventListener('touchmove', function(e) {
+    if (window.PointerEvent || !signatureDrawing) return;
+    const t = e.changedTouches[0];
+    if (!t) return;
+    moveSignature({
+      clientX: t.clientX, clientY: t.clientY,
+      preventDefault: () => e.preventDefault(), stopPropagation: () => e.stopPropagation()
+    });
+  }, { passive: false });
+
+  signaturePad.addEventListener('touchend', function(e) {
+    if (window.PointerEvent) return;
+    endSignature({
+      preventDefault: () => e.preventDefault(), stopPropagation: () => e.stopPropagation()
+    });
+  }, { passive: false });
 }
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initSignaturePad);
+  document.addEventListener('DOMContentLoaded', initSignaturePad, { once: true });
 } else {
   initSignaturePad();
 }
-
 
 /* ==========================================================
    OUVERTURE DU GOOGLE FORM
