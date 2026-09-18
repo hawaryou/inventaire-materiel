@@ -7,9 +7,20 @@
 
   <!-- Lecteur EAN-13 / CODE 128 / QR -->
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-  <!-- Moteur 1D/Code 128 : ZBar compilé en WebAssembly, plus robuste sur iPhone -->
-  <script src="https://cdn.jsdelivr.net/npm/@undecaf/zbar-wasm@0.9.15/dist/index.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@undecaf/barcode-detector-polyfill@0.9.23/dist/index.js"></script>
+  <!-- Moteur Code 128 : polyfill ZBar/WebAssembly chargé comme module ES.
+       Cette méthode évite le problème de variable globale non exposée sur Safari/iPhone. -->
+  <script type="module">
+    window.__zbarPolyfillReady = import(
+      "https://cdn.jsdelivr.net/npm/@undecaf/barcode-detector-polyfill@0.9.23/dist/main.js"
+    ).then(function(mod) {
+      window.BarcodeDetectorPolyfill = mod.BarcodeDetectorPolyfill;
+      return mod.BarcodeDetectorPolyfill;
+    }).catch(function(error) {
+      console.error("Chargement ZBar/WebAssembly impossible :", error);
+      window.__zbarPolyfillError = error;
+      throw error;
+    });
+  </script>
 
   <style>
     * { box-sizing: border-box; }
@@ -765,18 +776,14 @@ async function startScanner(field, mode = 'qr') {
      * Le polyfill sait analyser directement un élément <video> et supporte
      * explicitement Code 128.
      */
-    if (!window.barcodeDetectorPolyfill ||
-        !window.barcodeDetectorPolyfill.BarcodeDetectorPolyfill) {
-      showMessage(
-        "Le moteur Code 128 n'est pas chargé. Vérifiez la connexion Internet puis rechargez la page.",
-        "error"
-      );
-      scannerContainer.style.display = "none";
-      activeField = null;
-      return;
-    }
-
     try {
+      // Le module ES peut encore être en cours de chargement lorsque l'utilisateur
+      // appuie très vite sur le bouton : on attend donc explicitement sa disponibilité.
+      const Polyfill = await window.__zbarPolyfillReady;
+      if (!Polyfill) throw new Error("BarcodeDetectorPolyfill indisponible");
+
+      window.BarcodeDetectorPolyfill = Polyfill;
+
       const previewContainer = document.getElementById(readerId);
       previewContainer.className = 'reader barcode-reader';
       previewContainer.innerHTML = '';
@@ -822,7 +829,7 @@ async function startScanner(field, mode = 'qr') {
         throw new Error('Le flux caméra ne fournit aucune image vidéo.');
       }
 
-      const detector = new barcodeDetectorPolyfill.BarcodeDetectorPolyfill({
+      const detector = new window.BarcodeDetectorPolyfill({
         formats: ['code_128']
       });
 
