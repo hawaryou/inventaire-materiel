@@ -243,6 +243,153 @@
       display: none;
     }
 
+
+    /* ======================================================
+       POPUP DE SCAN RÉUSSI
+       ====================================================== */
+    .success-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 99999;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      background: rgba(13, 31, 55, 0.72);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+    }
+
+    .success-modal.show {
+      display: flex;
+      animation: modalFadeIn .18s ease-out;
+    }
+
+    .success-card {
+      width: min(520px, 100%);
+      max-height: calc(100vh - 36px);
+      overflow-y: auto;
+      background: #fff;
+      border-radius: 26px;
+      padding: 24px;
+      box-shadow: 0 24px 70px rgba(0,0,0,.30);
+      text-align: center;
+      animation: modalScaleIn .22s ease-out;
+    }
+
+    .success-icon {
+      width: 76px;
+      height: 76px;
+      margin: 0 auto 10px;
+      border-radius: 50%;
+      background: #19b77a;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 8px 24px rgba(25,183,122,.28);
+    }
+
+    .success-icon svg {
+      width: 43px;
+      height: 43px;
+      stroke: #fff;
+      stroke-width: 4;
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .success-card h2 {
+      margin: 4px 0 7px;
+      color: #18a86f;
+      font-size: 30px;
+      line-height: 1.1;
+    }
+
+    .success-subtitle {
+      margin: 0 0 18px;
+      color: #55708f;
+      font-size: 16px;
+    }
+
+    .success-image {
+      width: 100%;
+      height: 145px;
+      border-radius: 18px;
+      overflow: hidden;
+      background: linear-gradient(135deg, #e8fff6, #f6fffc);
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .success-image svg {
+      width: 94%;
+      height: 120px;
+      display: block;
+    }
+
+    .success-details {
+      text-align: left;
+      border-radius: 16px;
+      background: #eefaf6;
+      padding: 15px 17px;
+      margin-bottom: 18px;
+      color: #294f70;
+    }
+
+    .success-detail-line {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      margin: 6px 0;
+      font-size: 16px;
+      line-height: 1.4;
+    }
+
+    .success-detail-label {
+      min-width: 125px;
+      color: #55708f;
+    }
+
+    .success-detail-value {
+      color: #123d66;
+      font-weight: 700;
+      word-break: break-word;
+    }
+
+    .success-primary,
+    .success-secondary {
+      width: 100%;
+      font-weight: 700;
+      border-radius: 14px;
+      padding: 15px 16px;
+    }
+
+    .success-primary {
+      background: #19ad73;
+      color: #fff;
+      font-size: 18px;
+      margin-bottom: 10px;
+    }
+
+    .success-secondary {
+      background: #f3f7fa;
+      color: #294f70;
+      border: 1px solid #ccdbe6;
+    }
+
+    @keyframes modalFadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    @keyframes modalScaleIn {
+      from { transform: translateY(12px) scale(.97); opacity: 0; }
+      to { transform: translateY(0) scale(1); opacity: 1; }
+    }
+
     @media (max-width: 500px) {
       .scan-row {
         flex-direction: column;
@@ -892,8 +1039,10 @@ async function startScanner(field, mode = 'qr') {
 
         finished = true;
         document.getElementById(field).value = text;
-        showMessage('Code-barres détecté : ' + text + ' (' + format.toUpperCase().replace('_', '-') + ')', 'success');
+        const displayFormat = format.toUpperCase().replace('_', '-');
+        showMessage('Code-barres détecté : ' + text + ' (' + displayFormat + ')', 'success');
         stopScanner(field);
+        showSuccessModal(field, text, displayFormat);
         return true;
       }
 
@@ -989,6 +1138,7 @@ async function startScanner(field, mode = 'qr') {
         document.getElementById(field).value = cleanText;
         showMessage('QR Code détecté : ' + cleanText, 'success');
         stopScanner(field);
+        showSuccessModal(field, cleanText, 'QR Code');
       },
       function() {}
     );
@@ -1008,6 +1158,62 @@ async function startScanner(field, mode = 'qr') {
     activeField = null;
   }
 }
+
+
+
+/* ==========================================================
+   POPUP PERSONNALISÉ APRÈS SCAN RÉUSSI
+   ========================================================== */
+
+const FIELD_LABELS = {
+  lit: 'Lit SN',
+  potence: 'Potence SN',
+  barriere: 'Barrière SN',
+  matelas: 'Matelas à air SN'
+};
+
+function showSuccessModal(field, value, format) {
+  const modal = document.getElementById('successModal');
+  if (!modal) return;
+
+  document.getElementById('successValue').textContent = value || '—';
+  document.getElementById('successFormat').textContent = format || 'Code-barres';
+  document.getElementById('successField').textContent = FIELD_LABELS[field] || field || '—';
+
+  // Le petit visuel central reprend également la valeur détectée.
+  const illustrationText = document.getElementById('successIllustrationText');
+  if (illustrationText) illustrationText.textContent = (value || 'CODE').slice(0, 17);
+
+  modal.dataset.field = field || '';
+  modal.classList.add('show');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeSuccessModal() {
+  const modal = document.getElementById('successModal');
+  if (!modal) return;
+  modal.classList.remove('show');
+  document.body.style.overflow = '';
+}
+
+async function scanAnotherFromSuccess() {
+  const modal = document.getElementById('successModal');
+  const field = modal ? modal.dataset.field : '';
+  closeSuccessModal();
+  if (field) {
+    await new Promise(resolve => setTimeout(resolve, 120));
+    startScanner(field, 'barcode');
+  }
+}
+
+// Permet de fermer le popup en cliquant sur l'arrière-plan.
+document.getElementById('successModal').addEventListener('click', function(event) {
+  if (event.target === this) closeSuccessModal();
+});
+
+document.addEventListener('keydown', function(event) {
+  if (event.key === 'Escape') closeSuccessModal();
+});
 
 /* ==========================================================
    ARRETER LE SCANNER
@@ -1098,6 +1304,7 @@ async function scanPhoto(field, input) {
       "Code trouvé sur la photo : " + decodedText,
       "success"
     );
+    showSuccessModal(field, decodedText.trim(), 'Photo / code-barres');
 
   } catch (error) {
 
@@ -1286,6 +1493,72 @@ function openGoogleForm() {
 }
 
 </script>
+
+
+
+<!-- ==========================================================
+     POPUP PERSONNALISÉ APRÈS UN SCAN RÉUSSI
+     ========================================================== -->
+<div id="successModal" class="success-modal" role="dialog" aria-modal="true" aria-labelledby="successTitle">
+  <div class="success-card" onclick="event.stopPropagation()">
+
+    <div class="success-icon" aria-hidden="true">
+      <svg viewBox="0 0 48 48">
+        <path d="M10 25.5l9 9L38 15.5"></path>
+      </svg>
+    </div>
+
+    <h2 id="successTitle">Scan réussi !</h2>
+    <p class="success-subtitle">Le code-barres a été détecté avec succès.</p>
+
+    <div class="success-image" aria-hidden="true">
+      <svg viewBox="0 0 700 150" xmlns="http://www.w3.org/2000/svg">
+        <rect x="12" y="28" width="676" height="94" rx="18" fill="#152b3f"/>
+        <rect x="55" y="45" width="590" height="60" rx="12" fill="#e9e7d7"/>
+        <text x="78" y="82" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#243746">S/N</text>
+        <text x="133" y="82" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#243746" id="successIllustrationText">CODE</text>
+        <g transform="translate(360 50)" fill="#172d3f">
+          <rect x="0" y="0" width="3" height="50"/><rect x="8" y="0" width="2" height="50"/>
+          <rect x="15" y="0" width="5" height="50"/><rect x="25" y="0" width="2" height="50"/>
+          <rect x="32" y="0" width="4" height="50"/><rect x="42" y="0" width="2" height="50"/>
+          <rect x="49" y="0" width="6" height="50"/><rect x="60" y="0" width="2" height="50"/>
+          <rect x="67" y="0" width="3" height="50"/><rect x="76" y="0" width="6" height="50"/>
+          <rect x="87" y="0" width="2" height="50"/><rect x="94" y="0" width="5" height="50"/>
+          <rect x="104" y="0" width="3" height="50"/><rect x="113" y="0" width="6" height="50"/>
+          <rect x="124" y="0" width="2" height="50"/><rect x="131" y="0" width="4" height="50"/>
+          <rect x="141" y="0" width="6" height="50"/><rect x="152" y="0" width="2" height="50"/>
+          <rect x="159" y="0" width="4" height="50"/><rect x="168" y="0" width="3" height="50"/>
+          <rect x="176" y="0" width="6" height="50"/><rect x="187" y="0" width="2" height="50"/>
+          <rect x="194" y="0" width="5" height="50"/>
+        </g>
+      </svg>
+    </div>
+
+    <div class="success-details">
+      <div class="success-detail-line">
+        <span class="success-detail-label">Code détecté :</span>
+        <span id="successValue" class="success-detail-value">—</span>
+      </div>
+      <div class="success-detail-line">
+        <span class="success-detail-label">Format :</span>
+        <span id="successFormat" class="success-detail-value">—</span>
+      </div>
+      <div class="success-detail-line">
+        <span class="success-detail-label">Champ :</span>
+        <span id="successField" class="success-detail-value">—</span>
+      </div>
+    </div>
+
+    <button type="button" class="success-primary" onclick="closeSuccessModal()">
+      ✓ Continuer
+    </button>
+
+    <button type="button" class="success-secondary" onclick="scanAnotherFromSuccess()">
+      Scanner un autre code
+    </button>
+
+  </div>
+</div>
 
 </body>
 </html>
