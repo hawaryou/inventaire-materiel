@@ -22,6 +22,10 @@
     });
   </script>
 
+  <!-- Moteur 2D renforcé : ZXing-C++ WebAssembly.
+       Il prend en charge QR Code ET Data Matrix, y compris GS1 DataMatrix. -->
+  <script src="https://cdn.jsdelivr.net/npm/zxing-wasm@3.1.4/dist/iife/reader/index.js"></script>
+
   <style>
     * { box-sizing: border-box; }
 
@@ -143,6 +147,38 @@
       text-align: center;
       font-weight: bold;
       margin-bottom: 10px;
+    }
+
+    .scan-overlay-2d {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 62%;
+      aspect-ratio: 1 / 1;
+      transform: translate(-50%, -50%);
+      border: 3px solid rgba(255,255,255,0.9);
+      border-radius: 10px;
+      pointer-events: none;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding-bottom: 8px;
+      z-index: 3;
+    }
+
+    .scan-overlay-2d span {
+      background: rgba(0,0,0,0.65);
+      color: white;
+      padding: 5px 9px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: bold;
+    }
+
+    .reader {
+      position: relative;
+      overflow: hidden;
+      border-radius: 8px;
     }
 
     .scan-hint {
@@ -520,7 +556,7 @@
       onchange="scanPhoto('lit', this)">
 
     <div class="help">
-      Obligatoire. EAN-13, Code 128 ou QR Code.
+      Obligatoire. EAN-13, Code 128, QR Code ou Data Matrix.
     </div>
 
     <div id="scanner-lit" class="scanner">
@@ -532,7 +568,7 @@
       <div id="reader-lit" class="reader"></div>
 
       <div class="scan-hint">
-        Mode QR : placez le QR dans le carré. Mode code-barres : gardez toute la
+        Mode QR / Data Matrix : placez le code 2D au centre. Mode code-barres : gardez toute la
         largeur du code visible et évitez les reflets.
       </div>
 
@@ -607,7 +643,7 @@
       onchange="scanPhoto('potence', this)">
 
     <div class="help">
-      Facultatif. EAN-13, Code 128 ou QR Code.
+      Facultatif. EAN-13, Code 128, QR Code ou Data Matrix.
     </div>
 
     <div id="scanner-potence" class="scanner">
@@ -693,7 +729,7 @@
       onchange="scanPhoto('barriere', this)">
 
     <div class="help">
-      Facultatif. EAN-13, Code 128 ou QR Code.
+      Facultatif. EAN-13, Code 128, QR Code ou Data Matrix.
     </div>
 
     <div id="scanner-barriere" class="scanner">
@@ -779,7 +815,7 @@
       onchange="scanPhoto('matelas', this)">
 
     <div class="help">
-      Facultatif. EAN-13, Code 128 ou QR Code.
+      Facultatif. EAN-13, Code 128, QR Code ou Data Matrix.
     </div>
 
     <div id="scanner-matelas" class="scanner">
@@ -1127,51 +1163,237 @@ async function startScanner(field, mode = 'qr') {
     return;
   }
 
-  // QR Code : html5-qrcode reste inchangé.
+  // QR Code + Data Matrix : ZXing-C++ WebAssembly.
+  // On ne passe plus par html5-qrcode pour les codes 2D :
+  // Data Matrix est décodé directement par ZXing-C++ avec tryHarder.
   try {
+    if (!window.ZXingWASM || typeof window.ZXingWASM.readBarcodes !== 'function') {
+      throw new Error('Le moteur ZXing WebAssembly n’est pas chargé.');
+    }
+
     reader.className = 'reader';
+    reader.innerHTML = '';
 
-    const scanner = new Html5Qrcode(readerId, {
-      formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE]
-    });
+    const preview = document.createElement('video');
+    preview.autoplay = true;
+    preview.muted = true;
+    preview.playsInline = true;
+    preview.setAttribute('playsinline', 'true');
+    preview.setAttribute('webkit-playsinline', 'true');
+    preview.style.width = '100%';
+    preview.style.display = 'block';
+    preview.style.objectFit = 'cover';
+    preview.style.aspectRatio = '4 / 3';
+    reader.appendChild(preview);
 
-    activeScanner = scanner;
-    activeScannerType = 'html5';
+    const overlay = document.createElement('div');
+    overlay.className = 'scan-overlay-2d';
+    overlay.innerHTML = '<span>QR / Data Matrix</span>';
+    reader.appendChild(overlay);
 
-    await scanner.start(
-      { facingMode: "environment" },
-      {
-        fps: 10,
-        qrbox: function(viewfinderWidth, viewfinderHeight) {
-          const size = Math.min(viewfinderWidth, viewfinderHeight) * 0.72;
-          return { width: size, height: size };
+    let stream = null;
+
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1920 },
+          height: { ideal: 1440 },
+          frameRate: { ideal: 30, max: 30 }
+        },
+        audio: false
+      });
+    } catch (e) {
+      console.warn('Fallback caméra 2D:', e);
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' },
+        audio: false
+      });
+    }
+
+    preview.srcObject = stream;
+    await preview.play();
+    await new Promise(resolve => setTimeout(resolve, 700));
+
+    if (!preview.videoWidth || !preview.videoHeight) {
+      throw new Error('Le flux caméra ne fournit aucune image vidéo.');
+    }
+
+    let running = true;
+    let detecting = false;
+    let finished = false;
+    let timer = null;
+    let lastText = '';
+    let confirmations = 0;
+    let lastAt = 0;
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+    function get2DRegions() {
+      const vw = preview.videoWidth;
+      const vh = preview.videoHeight;
+
+      // Le Data Matrix de votre étiquette est carré et assez petit :
+      // on teste plusieurs cadrages centrés, dont un cadrage large.
+      const regions = [
+        { w: 0.92, h: 0.92, cx: 0.50, cy: 0.50 },
+        { w: 0.78, h: 0.78, cx: 0.50, cy: 0.50 },
+        { w: 0.62, h: 0.62, cx: 0.50, cy: 0.48 },
+        { w: 0.50, h: 0.50, cx: 0.50, cy: 0.46 },
+        { w: 0.42, h: 0.42, cx: 0.50, cy: 0.46 }
+      ];
+
+      return regions.map(r => {
+        const cropW = Math.max(320, Math.round(vw * r.w));
+        const cropH = Math.max(320, Math.round(vh * r.h));
+        return {
+          sx: Math.max(0, Math.round(vw * r.cx - cropW / 2)),
+          sy: Math.max(0, Math.round(vh * r.cy - cropH / 2)),
+          cropW: Math.min(cropW, vw),
+          cropH: Math.min(cropH, vh)
+        };
+      });
+    }
+
+    function drawRegion(r) {
+      if (canvas.width !== r.cropW || canvas.height !== r.cropH) {
+        canvas.width = r.cropW;
+        canvas.height = r.cropH;
+      }
+      ctx.drawImage(
+        preview,
+        r.sx, r.sy, r.cropW, r.cropH,
+        0, 0, r.cropW, r.cropH
+      );
+    }
+
+    async function accept2D(text, format) {
+      if (!text || finished) return false;
+
+      text = String(text).trim();
+      if (!text) return false;
+
+      const now = Date.now();
+
+      if (text === lastText && now - lastAt < 2500) {
+        confirmations++;
+      } else {
+        lastText = text;
+        confirmations = 1;
+      }
+
+      lastAt = now;
+
+      // Deux lectures identiques réduisent les faux positifs.
+      if (confirmations < 2) return false;
+
+      finished = true;
+
+      document.getElementById(field).value = text;
+
+      const displayFormat =
+        format === 'DataMatrix' ? 'Data Matrix' :
+        format === 'QRCode' ? 'QR Code' :
+        String(format || 'Code 2D');
+
+      showMessage(
+        'Code 2D détecté : ' + text + ' (' + displayFormat + ')',
+        'success'
+      );
+
+      await stopScanner(field);
+      showSuccessModal(field, text, displayFormat);
+
+      return true;
+    }
+
+    async function detect2DFrame() {
+      if (!running || finished || detecting || !preview.videoWidth) return;
+
+      detecting = true;
+
+      try {
+        const regions = get2DRegions();
+
+        for (const region of regions) {
+          if (!running || finished) break;
+
+          drawRegion(region);
+
+          const imageData = ctx.getImageData(
+            0, 0, canvas.width, canvas.height
+          );
+
+          const results = await window.ZXingWASM.readBarcodes(
+            imageData,
+            {
+              tryHarder: true,
+              formats: ['QRCode', 'DataMatrix'],
+              maxNumberOfSymbols: 1
+            }
+          );
+
+          if (results && results.length) {
+            for (const result of results) {
+              const format = result.format || result.symbology || '';
+              if (
+                (format === 'DataMatrix' || format === 'QRCode') &&
+                await accept2D(result.text, format)
+              ) {
+                break;
+              }
+            }
+          }
         }
-      },
-      function(decodedText) {
-        if (!decodedText) return;
-        const cleanText = decodedText.trim();
-        document.getElementById(field).value = cleanText;
-        showMessage('QR Code détecté : ' + cleanText, 'success');
-        stopScanner(field);
-        showSuccessModal(field, cleanText, 'QR Code');
-      },
-      function() {}
-    );
+      } catch (e) {
+        // Les erreurs de frame sont ignorées : on réessaie à la suivante.
+        // Une vraie erreur de chargement du moteur sera visible dans la console.
+      } finally {
+        detecting = false;
+      }
+    }
 
-    setTimeout(() => setCameraFocus(), 600);
+    activeScanner = {
+      stream: stream,
+      video: preview,
+      timer: null,
+      running: () => { running = false; }
+    };
+    activeScannerType = 'zxing2d';
+
+    timer = setInterval(detect2DFrame, 140);
+    activeScanner.timer = timer;
+
+    await detect2DFrame();
+
+    setTimeout(() => {
+      if (activeScanner && activeScanner.video === preview) {
+        setCameraFocus();
+      }
+    }, 700);
 
   } catch (error) {
-    console.error('QR:', error);
+    console.error('ZXing 2D:', error);
+
     showMessage(
-      "Impossible d'utiliser la caméra pour le QR Code." +
+      "Impossible d'utiliser le lecteur QR / Data Matrix." +
       (error && error.message ? ' (' + error.message + ')' : ''),
       'error'
     );
+
+    try {
+      if (typeof stream !== 'undefined' && stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+    } catch (e) {}
+
     scannerContainer.style.display = "none";
     activeScanner = null;
     activeScannerType = null;
     activeField = null;
   }
+
 }
 
 
@@ -1231,6 +1453,60 @@ document.addEventListener('keydown', function(event) {
 });
 
 /* ==========================================================
+   CONTROLES CAMERA (zoom / autofocus)
+   ========================================================== */
+
+function getActiveVideoTrack() {
+  if (!activeScanner) return null;
+  if (!activeScanner.stream || !activeScanner.stream.getVideoTracks) return null;
+  return activeScanner.stream.getVideoTracks()[0] || null;
+}
+
+async function setCameraZoom(value) {
+  const track = getActiveVideoTrack();
+  if (!track || !track.getCapabilities) return;
+
+  try {
+    const caps = track.getCapabilities();
+    if (!('zoom' in caps)) {
+      showMessage("Le zoom matériel n'est pas disponible sur cette caméra.", "info");
+      return;
+    }
+
+    const min = Number.isFinite(caps.zoom.min) ? caps.zoom.min : 1;
+    const max = Number.isFinite(caps.zoom.max) ? caps.zoom.max : value;
+    const zoom = Math.max(min, Math.min(max, Number(value)));
+
+    await track.applyConstraints({ advanced: [{ zoom: zoom }] });
+  } catch (error) {
+    console.warn("Zoom caméra :", error);
+  }
+}
+
+async function setCameraFocus() {
+  const track = getActiveVideoTrack();
+  if (!track || !track.getCapabilities) return;
+
+  try {
+    const caps = track.getCapabilities();
+    const advanced = {};
+
+    if (Array.isArray(caps.focusMode) && caps.focusMode.includes('continuous')) {
+      advanced.focusMode = 'continuous';
+    } else if (Array.isArray(caps.focusMode) && caps.focusMode.includes('single-shot')) {
+      advanced.focusMode = 'single-shot';
+    }
+
+    if (Object.keys(advanced).length) {
+      await track.applyConstraints({ advanced: [advanced] });
+    }
+  } catch (error) {
+    console.warn("Autofocus caméra :", error);
+  }
+}
+
+
+/* ==========================================================
    ARRETER LE SCANNER
    ========================================================== */
 
@@ -1253,7 +1529,20 @@ async function stopScanner(field) {
   }
 
   try {
-    if (typeToStop === 'zbar') {
+    if (typeToStop === 'zxing2d') {
+      if (scannerToStop.timer) {
+        clearInterval(scannerToStop.timer);
+        scannerToStop.timer = null;
+      }
+      if (scannerToStop.running) scannerToStop.running();
+      if (scannerToStop.stream) {
+        scannerToStop.stream.getTracks().forEach(track => track.stop());
+      }
+      if (scannerToStop.video) {
+        try { scannerToStop.video.pause(); } catch (e) {}
+        scannerToStop.video.srcObject = null;
+      }
+    } else if (typeToStop === 'zbar') {
       if (scannerToStop.timer) {
         clearInterval(scannerToStop.timer);
         scannerToStop.timer = null;
