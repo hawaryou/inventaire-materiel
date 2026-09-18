@@ -443,6 +443,102 @@
         width: 100%;
       }
     }
+
+    /* ======================================================
+       SIGNATURE ELECTRONIQUE
+       ====================================================== */
+    .signature-card {
+      background: white;
+      padding: 18px;
+      margin-bottom: 15px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+
+    .signature-title {
+      margin: 0 0 6px;
+      font-size: 18px;
+    }
+
+    .signature-help {
+      color: #666;
+      font-size: 13px;
+      line-height: 1.45;
+      margin: 0 0 12px;
+    }
+
+    .signature-pad-wrap {
+      position: relative;
+      width: 100%;
+      height: 190px;
+      border: 2px dashed #b8c2cc;
+      border-radius: 10px;
+      background: #fff;
+      overflow: hidden;
+      touch-action: none;
+    }
+
+    #signaturePad {
+      display: block;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+      cursor: crosshair;
+    }
+
+    .signature-placeholder {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      color: #a0a8b0;
+      font-size: 14px;
+      pointer-events: none;
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    .signature-line {
+      position: absolute;
+      left: 8%;
+      right: 8%;
+      bottom: 38px;
+      border-bottom: 1px solid #cbd2d9;
+      pointer-events: none;
+    }
+
+    .signature-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .signature-clear {
+      flex: 1;
+      background: #f3f4f6;
+      color: #333;
+      border: 1px solid #d1d5db;
+    }
+
+    .signature-status {
+      margin-top: 9px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #188038;
+      min-height: 18px;
+    }
+
+    @media (max-width: 500px) {
+      .signature-pad-wrap {
+        height: 175px;
+      }
+
+      .signature-placeholder {
+        white-space: normal;
+        width: 80%;
+      }
+    }
+
   </style>
 
 <style id="euromed-logo-style">
@@ -847,6 +943,31 @@
       </div>
 
     </div>
+
+  </div>
+
+
+  <!-- SIGNATURE ELECTRONIQUE -->
+  <div class="signature-card">
+
+    <h2 class="signature-title">Signature électronique <span class="required">*</span></h2>
+
+    <p class="signature-help">
+      Signez directement avec le doigt, un stylet ou la souris dans la zone ci-dessous.
+      La signature est obligatoire avant de poursuivre.
+    </p>
+
+    <div class="signature-pad-wrap" id="signaturePadWrap">
+      <canvas id="signaturePad" aria-label="Zone de signature électronique"></canvas>
+      <div class="signature-placeholder" id="signaturePlaceholder">Signez ici avec votre doigt</div>
+      <div class="signature-line"></div>
+    </div>
+
+    <div class="signature-actions">
+      <button type="button" class="signature-clear" onclick="clearSignature()">Effacer la signature</button>
+    </div>
+
+    <div id="signatureStatus" class="signature-status" aria-live="polite"></div>
 
   </div>
 
@@ -1635,6 +1756,129 @@ async function scanPhoto(field, input) {
 
 
 /* ==========================================================
+   SIGNATURE ELECTRONIQUE
+   ========================================================== */
+
+let signaturePad = null;
+let signatureCtx = null;
+let signatureDrawing = false;
+let signatureHasContent = false;
+let signatureLastPoint = null;
+
+function resizeSignaturePad(preserve) {
+  if (!signaturePad || !signatureCtx) return;
+
+  const rect = signaturePad.getBoundingClientRect();
+  const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 3));
+  const oldImage = preserve && signatureHasContent
+    ? signaturePad.toDataURL('image/png')
+    : null;
+
+  signaturePad.width = Math.round(rect.width * dpr);
+  signaturePad.height = Math.round(rect.height * dpr);
+  signatureCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  signatureCtx.lineCap = 'round';
+  signatureCtx.lineJoin = 'round';
+  signatureCtx.strokeStyle = '#17202a';
+  signatureCtx.lineWidth = 2.6;
+
+  if (oldImage) {
+    const image = new Image();
+    image.onload = function() {
+      signatureCtx.drawImage(image, 0, 0, rect.width, rect.height);
+    };
+    image.src = oldImage;
+  }
+}
+
+function signaturePoint(event) {
+  const rect = signaturePad.getBoundingClientRect();
+  return {
+    x: event.clientX - rect.left,
+    y: event.clientY - rect.top
+  };
+}
+
+function beginSignature(event) {
+  if (!signaturePad) return;
+  event.preventDefault();
+  signatureDrawing = true;
+  signatureLastPoint = signaturePoint(event);
+  signaturePad.setPointerCapture?.(event.pointerId);
+  signatureHasContent = true;
+  document.getElementById('signaturePlaceholder').style.display = 'none';
+  document.getElementById('signatureStatus').textContent = 'Signature enregistrée sur cette page.';
+
+  signatureCtx.beginPath();
+  signatureCtx.arc(signatureLastPoint.x, signatureLastPoint.y, 1.25, 0, Math.PI * 2);
+  signatureCtx.fillStyle = '#17202a';
+  signatureCtx.fill();
+}
+
+function drawSignature(event) {
+  if (!signatureDrawing || !signatureLastPoint) return;
+  event.preventDefault();
+
+  const points = typeof event.getCoalescedEvents === 'function'
+    ? event.getCoalescedEvents()
+    : [event];
+
+  for (const pointEvent of points) {
+    const point = signaturePoint(pointEvent);
+    signatureCtx.beginPath();
+    signatureCtx.moveTo(signatureLastPoint.x, signatureLastPoint.y);
+    signatureCtx.lineTo(point.x, point.y);
+    signatureCtx.stroke();
+    signatureLastPoint = point;
+  }
+}
+
+function endSignature(event) {
+  if (!signatureDrawing) return;
+  event.preventDefault();
+  signatureDrawing = false;
+  signatureLastPoint = null;
+  try { signaturePad.releasePointerCapture?.(event.pointerId); } catch (e) {}
+}
+
+function clearSignature() {
+  if (!signaturePad || !signatureCtx) return;
+  const rect = signaturePad.getBoundingClientRect();
+  signatureCtx.clearRect(0, 0, rect.width, rect.height);
+  signatureHasContent = false;
+  signatureDrawing = false;
+  signatureLastPoint = null;
+  document.getElementById('signaturePlaceholder').style.display = '';
+  document.getElementById('signatureStatus').textContent = '';
+}
+
+function initSignaturePad() {
+  signaturePad = document.getElementById('signaturePad');
+  if (!signaturePad) return;
+  signatureCtx = signaturePad.getContext('2d');
+  resizeSignaturePad(false);
+
+  signaturePad.addEventListener('pointerdown', beginSignature);
+  signaturePad.addEventListener('pointermove', drawSignature);
+  signaturePad.addEventListener('pointerup', endSignature);
+  signaturePad.addEventListener('pointercancel', endSignature);
+  signaturePad.addEventListener('pointerleave', function(event) {
+    if (signatureDrawing && event.buttons === 0) endSignature(event);
+  });
+
+  window.addEventListener('resize', function() {
+    resizeSignaturePad(true);
+  });
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initSignaturePad);
+} else {
+  initSignaturePad();
+}
+
+
+/* ==========================================================
    OUVERTURE DU GOOGLE FORM
    ========================================================== */
 
@@ -1660,6 +1904,24 @@ function openGoogleForm() {
 
   const matelas =
     document.getElementById("matelas").value.trim();
+
+
+  /* Signature obligatoire */
+
+  if (!signatureHasContent) {
+
+    showMessage(
+      "Veuillez signer électroniquement avant de poursuivre.",
+      "error"
+    );
+
+    document.getElementById("signaturePad")?.scrollIntoView({
+      behavior: "smooth",
+      block: "center"
+    });
+
+    return;
+  }
 
 
   /* Champs obligatoires */
