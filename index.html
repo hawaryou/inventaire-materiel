@@ -503,6 +503,14 @@ html[data-theme="light"]{background:#eaf5ff!important}html[data-theme="light"] b
 html[data-theme="light"] body::before{background:radial-gradient(circle at 12% 20%,rgba(14,165,233,.38) 0 20px,rgba(56,189,248,.18) 21px 45px,transparent 82px),radial-gradient(circle at 78% 18%,rgba(139,92,246,.34) 0 16px,rgba(196,181,253,.19) 17px 42px,transparent 78px),radial-gradient(circle at 30% 72%,rgba(236,72,153,.28) 0 24px,rgba(251,207,232,.20) 25px 48px,transparent 88px),radial-gradient(circle at 86% 78%,rgba(16,185,129,.28) 0 18px,rgba(167,243,208,.19) 19px 42px,transparent 82px),radial-gradient(circle at 55% 48%,rgba(251,191,36,.22) 0 13px,transparent 66px);animation-duration:16s;opacity:1}
 @media(prefers-reduced-motion:reduce){body::before{animation:none!important}}
 </style>
+<style id="checkup-contrast-override">
+/* Check-ups hebdomadaires : couleurs forcées dans les deux thèmes */
+.tools-directory button.tool-checkup-truck,html[data-theme="dark"] body .tools-directory button.tool-checkup-truck{background:linear-gradient(120deg,#164e63,#0891b2)!important;color:#fff!important;border:2px solid #22d3ee!important;box-shadow:0 8px 20px rgba(8,145,178,.28)!important}
+.tools-directory button.tool-checkup-parts,html[data-theme="dark"] body .tools-directory button.tool-checkup-parts{background:linear-gradient(120deg,#4c1d95,#7c3aed)!important;color:#fff!important;border:2px solid #c4b5fd!important;box-shadow:0 8px 20px rgba(124,58,237,.28)!important}
+html[data-theme="light"] body main .tools-directory button.tool-checkup-truck,html[data-theme="light"] body .tools-directory button.tool-checkup-truck{background:linear-gradient(120deg,#075985,#0891b2)!important;background-image:linear-gradient(120deg,#075985,#0891b2)!important;color:#fff!important;border:2px solid #22d3ee!important}
+html[data-theme="light"] body main .tools-directory button.tool-checkup-parts,html[data-theme="light"] body .tools-directory button.tool-checkup-parts{background:linear-gradient(120deg,#4c1d95,#7c3aed)!important;background-image:linear-gradient(120deg,#4c1d95,#7c3aed)!important;color:#fff!important;border:2px solid #c4b5fd!important}
+.tools-directory button.tool-checkup-truck *, .tools-directory button.tool-checkup-parts *{color:#fff!important;background:transparent!important;background-image:none!important}
+</style>
 </head>
 
 <body>
